@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0a">
+<title>VIDEO CREATE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Bebas+Neue&family=Inter:wght@600;700&family=JetBrains+Mono:wght@700&family=Playfair+Display:wght@700&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0a0a;--panel:#141414;--panel2:#1c1c1c;--line:#2a2a2a;--txt:#f2f2f2;--dim:#8a8a8a;--acc:#b6ff00;--err:#ff4d4d;--r:16px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.4 Inter,system-ui,-apple-system,sans-serif}
+body{padding:max(12px,env(safe-area-inset-top)) 12px max(24px,env(safe-area-inset-bottom))}
+.wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+header{display:flex;align-items:center;justify-content:space-between;padding:6px 2px}
+.logo{font:400 22px 'Archivo Black',Impact,sans-serif;letter-spacing:.02em}.logo b{color:var(--acc);font-weight:400}
+.tag{font-size:11px;color:var(--dim)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px}
+.card h2{margin:0;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:700}
+textarea,input[type=text],input[type=url],input[type=number],select{width:100%;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:12px;padding:12px;font:inherit;outline:none;min-height:46px}
+textarea{min-height:104px;resize:vertical;font-size:16px}
+input:focus,textarea:focus,select:focus{border-color:var(--acc)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:999px;padding:10px 14px;font:inherit;font-size:13px;cursor:pointer;min-height:42px}
+.chip.on{background:var(--acc);color:#0a0a0a;border-color:var(--acc);font-weight:700}
+.btn{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:12px;padding:12px 16px;font:inherit;font-weight:700;cursor:pointer;min-height:46px}
+.btn.main{background:var(--acc);color:#0a0a0a;border-color:var(--acc);font-size:17px;min-height:56px;letter-spacing:.02em}
+.btn:disabled{opacity:.5;cursor:default}
+.btn:active{transform:scale(.98)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>*{flex:1 1 90px}
+label.l{font-size:12px;color:var(--dim);display:flex;flex-direction:column;gap:4px}
+input[type=range]{width:100%;accent-color:var(--acc);height:32px}
+.stage{display:flex;justify-content:center;background:#000;border-radius:12px;padding:6px}
+#cv{width:auto;height:auto;max-width:100%;max-height:58vh;background:#000;border-radius:8px;display:block}
+.bar{display:flex;gap:8px;align-items:center}.bar input{flex:1}.time{font:12px 'JetBrains Mono',monospace;color:var(--dim);min-width:84px;text-align:right}
+.scene{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.scene.sel{border-color:var(--acc)}
+.sh{display:flex;align-items:center;gap:6px}.sh b{color:var(--acc)}.sh .t{color:var(--dim);font-size:12px;flex:1;cursor:pointer}
+.sh button{background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:10px;width:40px;height:38px;font-size:15px;cursor:pointer}
+.scene input,.scene select{padding:9px;min-height:40px;font-size:14px}
+.hint{font-size:12px;color:var(--dim)}
+.bad{color:var(--err)}.ok{color:var(--acc)}
+.prog{height:10px;border-radius:6px;background:var(--panel2);overflow:hidden}.prog i{display:block;height:100%;width:0;background:var(--acc);transition:width .15s}
+.proj{display:flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:8px}
+.proj span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proj .btn{min-height:38px;padding:6px 10px;font-size:13px}
+#toast{position:fixed;left:12px;right:12px;bottom:max(14px,env(safe-area-inset-bottom));max-width:560px;margin:0 auto;background:#222;border:1px solid var(--acc);color:var(--txt);border-radius:14px;padding:12px 14px;z-index:9;opacity:0;transform:translateY(12px);pointer-events:none;transition:.25s}
+#toast.show{opacity:1;transform:none}#toast.err{border-color:var(--err)}
+details summary{cursor:pointer;color:var(--dim);font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;min-height:28px}
+@media(min-width:1000px){.wrap{max-width:1040px;display:grid;grid-template-columns:1fr 1fr;align-items:start}header,.full{grid-column:1/3}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><div class="logo">VIDEO<b>CREATE</b></div><div class="tag" id="srcTag">Director: локальный</div></header>
+
+<section class="card">
+  <h2>1 · Запрос</h2>
+  <textarea id="brief" placeholder="Например: динамичное видео о том, что человек даже не представляет, какие возможности открывает искусственный интеллект"></textarea>
+  <div class="chips" id="fmtChips"></div>
+  <div class="chips" id="styleChips"></div>
+  <label class="l">Длительность: <span id="durVal">20</span> с<input type="range" id="durRange" min="8" max="60" value="20"></label>
+  <button class="btn main" id="btnCreate">Создать видео</button>
+  <div class="row"><input type="text" id="aiEdit" placeholder="Правка через ИИ: «сделай финал агрессивнее»" style="flex:3 1 200px"><button class="btn" id="btnAiEdit" style="flex:1 1 90px">Править</button></div>
+</section>
+
+<section class="card">
+  <h2>2 · Предпросмотр</h2>
+  <div class="stage"><canvas id="cv" width="720" height="1280"></canvas></div>
+  <div class="bar"><button class="btn" id="btnPlay" style="min-width:56px">▶</button><input type="range" id="scrub" min="0" max="1000" value="0"><span class="time" id="timeLbl">0.0 / 0.0</span></div>
+  <label class="l" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="subsOn" checked style="width:22px;height:22px;accent-color:#b6ff00">Субтитры (строка subtitle в сценах)</label>
+</section>
+
+<section class="card full">
+  <h2>3 · Сцены (Edit Mode)</h2>
+  <div id="sceneList" style="display:flex;flex-direction:column;gap:8px"></div>
+  <div class="row"><button class="btn" id="btnAddScene">+ Сцена</button><button class="btn" id="btnFit">Распределить время</button></div>
+  <div class="hint" id="totalHint"></div>
+</section>
+
+<section class="card">
+  <h2>4 · Звук</h2>
+  <div class="row"><label class="l">Музыка (файл)<input type="file" id="musicFile" accept="audio/*"></label></div>
+  <div class="row">
+    <label class="l">Громкость музыки<input type="range" id="volMusic" min="0" max="100" value="60"></label>
+    <label class="l">Fade in, с<input type="number" id="fadeIn" value="0.5" min="0" max="5" step="0.1"></label>
+    <label class="l">Fade out, с<input type="number" id="fadeOut" value="1" min="0" max="5" step="0.1"></label>
+  </div>
+  <div class="row"><select id="voiceSel"><option>Fenrir</option><option>Kore</option><option>Puck</option><option>Charon</option><option>Zephyr</option><option>Aoede</option></select><button class="btn" id="btnTts">Озвучить (TTS)</button><button class="btn" id="btnClearAudio">Убрать звук</button></div>
+  <label class="l" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="fitVoice" checked style="width:22px;height:22px;accent-color:#b6ff00">После озвучки подогнать длительность сцен (пропорционально длине текста)</label>
+  <div class="hint" id="audioHint">Звук не подключён. TTS требует адрес Worker в настройках.</div>
+</section>
+
+<section class="card">
+  <h2>5 · Экспорт</h2>
+  <div class="row">
+    <label class="l">Формат файла<select id="expFmt"></select></label>
+    <label class="l">FPS<select id="expFps"><option>24</option><option selected>30</option><option>60</option></select></label>
+    <label class="l">Качество<select id="expQ"><option value="2500000">Низкое</option><option value="5000000" selected>Среднее</option><option value="10000000">Высокое</option></select></label>
+  </div>
+  <button class="btn main" id="btnExport">Экспортировать</button>
+  <div class="prog"><i id="expProg"></i></div>
+  <div class="hint" id="expHint"></div>
+  <a id="dl" class="btn" style="display:none;text-align:center;text-decoration:none">Скачать результат</a>
+  <div class="hint" id="compat"></div>
+</section>
+
+<section class="card">
+  <h2>6 · Проекты</h2>
+  <div class="row"><input type="text" id="projName" placeholder="Название проекта"><button class="btn" id="btnSave">Сохранить</button></div>
+  <div id="projList" style="display:flex;flex-direction:column;gap:6px"></div>
+  <div class="row"><button class="btn" id="btnJsonOut">Экспорт JSON</button><label class="btn" style="text-align:center;cursor:pointer">Импорт JSON<input type="file" id="jsonIn" accept="application/json,.json" style="display:none"></label></div>
+</section>
+
+<section class="card">
+  <details>
+    <summary>Настройки ИИ (Worker)</summary>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+      <input type="url" id="workerUrl" placeholder="https://имя.аккаунт.workers.dev">
+      <div class="row"><button class="btn" id="btnWorkerSave">Сохранить</button><button class="btn" id="btnWorkerTest">Проверить</button></div>
+      <div class="hint">Ключ Gemini хранится только в секретах Worker (GEMINI_API_KEY), в код сайта он не попадает. Без Worker работает локальный Director на шаблонах.</div>
+    </div>
+  </details>
+</section>
+</div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* ============================================================
+   VIDEO CREATE — каркас v0.1 (один файл)
+   Модули (в будущем выносятся в /js/...):
+   Util · Easing · AnimationEngine(ANIMS) · FX · TransitionEngine(TRANS) · Styles
+   Layout · RenderEngine · Director · Timeline(state) · AudioEngine · ExportEngine
+   Storage(IndexedDB) · UI
+   ============================================================ */
+
+/* ---------- Util ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const hrand = (a, b = 0) => { const x = Math.sin(a * 127.1 + b * 311.7 + 1.234) * 43758.5453; return x - Math.floor(x); }; // детерминированный «random»
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+const hexA = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pickIn = (v, list, fb) => { v = String(v || '').toLowerCase(); return list.includes(v) ? v : fb; };
+function rr(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+let toastT;
+function toast(msg, err) { const t = $('#toast'); t.textContent = msg; t.className = 'show' + (err ? ' err' : ''); clearTimeout(toastT); toastT = setTimeout(() => t.className = '', err ? 5200 : 2600); }
+
+/* ---------- Easing ---------- */
+const E = {
+  lin: t => t,
+  out3: t => 1 - Math.pow(1 - t, 3),
+  inOut3: t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2,
+  back: t => { const c = 1.70158, c3 = c + 1; return 1 + c3 * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); },
+  elastic: t => t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - .75) * (2 * Math.PI / 3)) + 1,
+  expo: t => t === 1 ? 1 : 1 - Math.pow(2, -10 * t)
+};
+
+/* ---------- Styles (расширяемый реестр) ---------- */
+const STYLES = {};
+function registerStyle(s) { STYLES[s.id] = s; }
+const F = { ab: "'Archivo Black',Impact,'Arial Black',sans-serif", bebas: "'Bebas Neue',Impact,sans-serif", pf: "'Playfair Display',Georgia,serif", sg: "'Space Grotesk',Inter,sans-serif", jb: "'JetBrains Mono',Menlo,monospace", inter: "Inter,system-ui,sans-serif" };
+[
+  { id: 'kinetic_dark', name: 'Kinetic', bg: '#0a0a0a', fg: '#ffffff', accent: '#b6ff00', font: F.ab, weight: 400, upper: true, speed: 1, anims: ['pop', 'slide', 'zoom', 'stagger', 'mask', 'words', 'split'], trans: ['cut', 'flash', 'swipe', 'zoom'], fx: ['bars', 'burst', 'lines'] },
+  { id: 'dark_neon', name: 'Dark Neon', bg: '#07050f', fg: '#ffffff', accent: '#00f0ff', font: F.sg, weight: 700, upper: true, speed: 1, anims: ['neon', 'blur', 'letters', 'pop'], trans: ['flash', 'blur', 'zoom'], fx: ['rings', 'particles'] },
+  { id: 'minimal', name: 'Minimal', bg: '#111111', fg: '#f4f4f4', accent: '#e6e6e6', font: F.inter, weight: 700, upper: false, speed: .8, anims: ['blur', 'slide', 'mask', 'words'], trans: ['blur', 'cut', 'wipe'], fx: ['lines'] },
+  { id: 'cinematic', name: 'Cinematic', bg: '#050505', fg: '#f6efe4', accent: '#ffb347', font: F.pf, weight: 700, upper: true, speed: .7, anims: ['tracking', 'blur', 'perspective', 'mask'], trans: ['blur', 'zoom', 'cut'], fx: ['particles', 'lines'] },
+  { id: 'tech', name: 'Tech', bg: '#020b12', fg: '#e8fbff', accent: '#00e5ff', font: F.jb, weight: 700, upper: true, speed: 1, anims: ['typewriter', 'glitch', 'letters', 'slide'], trans: ['glitch', 'wipe', 'cut'], fx: ['lines', 'rings', 'particles'] },
+  { id: 'glitch', name: 'Glitch', bg: '#08080a', fg: '#ffffff', accent: '#ff2a55', font: F.bebas, weight: 400, upper: true, speed: 1.1, anims: ['glitch', 'explode', 'typewriter', 'zoom'], trans: ['glitch', 'flash', 'cut'], fx: ['bars', 'burst'] },
+  { id: 'bold', name: 'Bold', bg: '#0a0a0a', fg: '#ffffff', accent: '#ffe600', font: F.ab, weight: 400, upper: true, speed: 1.1, anims: ['zoom', 'pop', 'elastic', 'split'], trans: ['cut', 'swipe', 'flash'], fx: ['burst', 'bars'] },
+  { id: 'editorial', name: 'Editorial', bg: '#141210', fg: '#f3ece2', accent: '#ff6b4a', font: F.pf, weight: 700, upper: false, speed: .85, anims: ['mask', 'slide', 'words', 'perspective'], trans: ['wipe', 'cut', 'blur'], fx: ['lines'] },
+  { id: 'explainer', name: 'Explainer', bg: '#0b1220', fg: '#ffffff', accent: '#4ade80', font: F.sg, weight: 700, upper: true, speed: 1, anims: ['words', 'pop', 'stagger', 'slide'], trans: ['swipe', 'zoom', 'wipe'], fx: ['rings', 'bars'] },
+  { id: 'viral', name: 'Viral', bg: '#000000', fg: '#ffffff', accent: '#b6ff00', font: F.ab, weight: 400, upper: true, speed: 1.25, anims: ['elastic', 'pop', 'explode', 'rotate', 'zoom'], trans: ['flash', 'cut', 'spin'], fx: ['burst', 'particles', 'rings'] }
+].forEach(registerStyle);
+
+/* ---------- Animation Engine: текст ---------- */
+// Каждая анимация — независимый модуль: {unit, stagger, dur, fn(q, c) -> состояние}
+// q — прогресс элемента 0..1; c = {k,n,item,L,R(j),dir,lt}. Состояние: a,x,y (в размерах шрифта),s,sx,sy,r,glow,blur,gl,clip
+const ANIMS = {};
+const ORG = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] };
+function regAnim(id, name, def) { ANIMS[id] = { id, name, ...def }; }
+regAnim('letters', 'Буквы по очереди', { unit: 'char', stagger: .7, dur: .9, fn: q => ({ a: Math.min(1, q * 3), y: (1 - E.out3(q)) * .5 }) });
+regAnim('words', 'Слова по очереди', { unit: 'word', stagger: .65, dur: .9, fn: q => ({ a: Math.min(1, q * 4), s: E.back(q), y: (1 - E.out3(q)) * .2 }) });
+regAnim('typewriter', 'Печатная машинка', { unit: 'char', stagger: .92, dur: 1.2, fn: q => ({ a: q > 0 ? 1 : 0 }) });
+regAnim('pop', 'Pop', { unit: 'all', stagger: 0, dur: .55, fn: q => ({ a: Math.min(1, q * 5), s: .3 + .7 * E.back(q) }) });
+regAnim('elastic', 'Эластичный отскок', { unit: 'char', stagger: .5, dur: 1.1, fn: q => { const e = E.elastic(q); return { a: Math.min(1, q * 6), s: e, y: (1 - e) * .3 }; } });
+regAnim('slide', 'Слайд', { unit: 'line', stagger: .5, dur: .8, fn: (q, c) => { const e = E.expo(q), v = ORG[c.dir] || ORG.left, f = (c.k % 2 && v[0]) ? -1 : 1; return { a: Math.min(1, q * 4), x: v[0] * f * (1 - e) * 5, y: v[1] * (1 - e) * 2.5 }; } });
+regAnim('zoom', 'Драматичный зум', { unit: 'all', stagger: 0, dur: .7, fn: q => ({ a: Math.min(1, q * 6), s: 3.2 - 2.2 * E.out3(q) }) });
+regAnim('blur', 'Blur reveal', { unit: 'all', stagger: 0, dur: 1, fn: q => ({ a: q * q, blur: (1 - q), s: 1.15 - .15 * E.out3(q) }) });
+regAnim('mask', 'Маска (выезд из линии)', { unit: 'line', stagger: .5, dur: .8, fn: q => ({ y: (1 - E.expo(q)) * 1.1, clip: true }) });
+regAnim('glitch', 'Glitch', { unit: 'char', stagger: .3, dur: .8, fn: (q, c) => ({ a: q > .35 ? 1 : (q > 0 && hrand(Math.floor(c.lt * 30) + c.k, 2) > .45 ? 1 : 0), x: (1 - q) * (c.R(3) - .5) * 1.2, gl: 1 - q }) });
+regAnim('neon', 'Neon glow', { unit: 'word', stagger: .5, dur: 1, fn: (q, c) => ({ a: q < .6 ? (hrand(Math.floor(c.lt * 24), c.k) > .45 ? 1 : .15) : 1, glow: q > .3 ? 1.1 + .3 * Math.sin(c.lt * 6) : .3 }) });
+regAnim('explode', 'Сборка из осколков', { unit: 'char', stagger: .25, dur: 1, fn: (q, c) => { const e = E.out3(q); return { a: Math.min(1, q * 5), x: (c.R(1) - .5) * 10 * (1 - e), y: (c.R(2) - .5) * 10 * (1 - e), r: (c.R(3) - .5) * 6 * (1 - e), s: .2 + .8 * e }; } });
+regAnim('rotate', 'Вращение', { unit: 'char', stagger: .6, dur: .9, fn: q => ({ a: Math.min(1, q * 5), r: -(1 - E.back(q)) * 1.6, y: (1 - E.out3(q)) * .6 }) });
+regAnim('perspective', 'Перспектива', { unit: 'line', stagger: .4, dur: 1, fn: q => { const e = E.out3(q); return { a: Math.min(1, q * 3), sy: .2 + .8 * e, sx: .7 + .3 * e, y: (1 - e) * 1.2 }; } });
+regAnim('tracking', 'Tracking', { unit: 'all', stagger: 0, dur: 1.2, fn: (q, c) => ({ a: Math.min(1, q * 2), x: c.item ? c.item.x / c.L.size * (1 - E.out3(q)) * .9 : 0 }) });
+regAnim('split', 'Split', { unit: 'line', stagger: .3, dur: .8, fn: (q, c) => ({ a: Math.min(1, q * 5), x: (c.k % 2 ? 1 : -1) * (1 - E.expo(q)) * 6 }) });
+regAnim('stagger', 'Stagger', { unit: 'word', stagger: .8, dur: 1.1, fn: q => { const e = E.out3(q); return { a: Math.min(1, q * 3), y: (1 - e), s: .9 + .1 * e, r: (1 - e) * .15 }; } });
+
+/* ---------- FX: элементы сцены ---------- */
+const FX = {};
+function regFx(id, name, draw) { FX[id] = { id, name, draw }; }
+// draw(ctx, W, H, lt, dur, col, seed)
+regFx('rings', 'Кольца', (c, W, H, lt, d, col) => { c.lineWidth = W * .006; for (let i = 0; i < 3; i++) { const p = (lt * .7 + i / 3) % 1; c.strokeStyle = hexA(col, (1 - p) * .7); c.beginPath(); c.arc(W / 2, H / 2, p * Math.max(W, H) * .6, 0, 7); c.stroke(); } });
+regFx('particles', 'Частицы', (c, W, H, lt, d, col, seed) => { for (let i = 0; i < 44; i++) { const x = hrand(seed, i) * W, y = ((hrand(seed, i + 99) - lt * (.04 + hrand(seed, i + 7) * .1)) % 1 + 1) % 1 * H, r = W * (.003 + hrand(seed, i + 3) * .006); c.fillStyle = hexA(col, .25 + .6 * Math.abs(Math.sin(lt * 2 + i))); c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); } });
+regFx('bars', 'Полосы', (c, W, H, lt, d, col, seed) => { for (let i = 0; i < 5; i++) { const y = H * (.12 + hrand(seed, i) * .76), q = E.expo(clamp((lt - i * .06) / .5, 0, 1)), w = W * (.25 + hrand(seed, i + 5) * .6) * q, left = i % 2 === 0; c.fillStyle = hexA(col, .85); c.fillRect(left ? 0 : W - w, y, w, H * .012); } });
+regFx('lines', 'Линии', (c, W, H, lt, d, col, seed) => { c.strokeStyle = hexA(col, .5); c.lineWidth = W * .003; for (let i = 0; i < 6; i++) { const x = W * (.08 + i * .168), q = E.expo(clamp((lt - i * .07) / .6, 0, 1)); c.beginPath(); c.moveTo(x, 0); c.lineTo(x, H * q); c.stroke(); } });
+regFx('burst', 'Лучевая вспышка', (c, W, H, lt, d, col) => { const q = clamp(lt / .7, 0, 1); if (q >= 1) return; const e = E.out3(q); c.strokeStyle = hexA(col, 1 - q); c.lineWidth = W * .008; for (let i = 0; i < 18; i++) { const a = i / 18 * Math.PI * 2, r0 = e * W * .2, r1 = e * W * .75; c.beginPath(); c.moveTo(W / 2 + Math.cos(a) * r0, H / 2 + Math.sin(a) * r0); c.lineTo(W / 2 + Math.cos(a) * r1, H / 2 + Math.sin(a) * r1); c.stroke(); } });
+
+/* ---------- Transition Engine ---------- */
+// draw(ctx, A(canvas предыдущей сцены), p 0..1, W, H, pal, tmp(canvas))
+const TRANS = {};
+function regTrans(id, name, draw) { TRANS[id] = { id, name, draw }; }
+regTrans('cut', 'Резкий cut', () => { });
+regTrans('flash', 'Вспышка', (c, A, p, W, H) => { if (p < .5) { c.drawImage(A, 0, 0); c.globalAlpha = p * 2; } else c.globalAlpha = (1 - p) * 2; c.fillStyle = '#fff'; c.fillRect(0, 0, W, H); c.globalAlpha = 1; });
+regTrans('zoom', 'Zoom', (c, A, p, W, H) => { const s = 1 + E.out3(p) * .8; c.save(); c.globalAlpha = 1 - p; c.translate(W / 2, H / 2); c.scale(s, s); c.drawImage(A, -W / 2, -H / 2); c.restore(); });
+regTrans('swipe', 'Swipe', (c, A, p, W, H, pal) => { const x = -E.inOut3(p) * W; c.drawImage(A, x, 0); c.fillStyle = pal.accent; c.fillRect(x + W - W * .01, 0, W * .02, H); });
+regTrans('glitch', 'Glitch', (c, A, p, W, H) => { if (p > .85) return; const n = 10, h = H / n, f = Math.floor(p * 24); for (let i = 0; i < n; i++) { if (hrand(f, i) > .4) { const dx = (hrand(f, i + 20) - .5) * W * .35; c.drawImage(A, 0, i * h, W, h, dx, i * h, W, h); } } c.globalAlpha = .25; c.fillStyle = hrand(f, 50) > .5 ? '#ff00aa' : '#00ffee'; c.fillRect(0, hrand(f, 51) * H, W, H * .05); c.globalAlpha = 1; });
+regTrans('blur', 'Blur', (c, A, p, W, H, pal, tmp) => { const k = 1 + p * 14, w = Math.max(8, W / k | 0), h = Math.max(8, H / k | 0); tmp.width = w; tmp.height = h; const t = tmp.getContext('2d'); t.drawImage(A, 0, 0, w, h); c.save(); c.globalAlpha = 1 - E.inOut3(p); c.imageSmoothingEnabled = true; c.drawImage(tmp, 0, 0, w, h, 0, 0, W, H); c.restore(); });
+regTrans('wipe', 'Wipe', (c, A, p, W, H, pal) => { const sk = H * .3, edge = E.inOut3(p) * (W + sk); c.save(); c.beginPath(); c.moveTo(edge, 0); c.lineTo(W, 0); c.lineTo(W, H); c.lineTo(edge - sk, H); c.closePath(); c.clip(); c.drawImage(A, 0, 0); c.restore(); c.strokeStyle = pal.accent; c.lineWidth = W * .01; c.beginPath(); c.moveTo(edge, 0); c.lineTo(edge - sk, H); c.stroke(); });
+regTrans('spin', 'Spin', (c, A, p, W, H) => { c.save(); c.globalAlpha = 1 - p; c.translate(W / 2, H / 2); c.rotate(E.inOut3(p) * .9); const s = 1 + p * .6; c.scale(s, s); c.drawImage(A, -W / 2, -H / 2); c.restore(); });
+
+const ENGINE = { bg: ['dark', 'light', 'accent', 'grid', 'rays', 'glow'], trans: Object.keys(TRANS), anim: Object.keys(ANIMS), fx: Object.keys(FX), dir: ['up', 'down', 'left', 'right'] };
+const LABEL = { dark: 'Тёмный', light: 'Светлый', accent: 'Акцент', grid: 'Сетка', rays: 'Лучи', glow: 'Свечение' };
+
+/* ---------- Layout текста ---------- */
+const layoutCache = new Map();
+function layout(ctx, text, W, H, pal, mul) {
+  const key = text + '|' + W + 'x' + H + '|' + pal.font + pal.weight + pal.upper + '|' + mul;
+  if (layoutCache.has(key)) return layoutCache.get(key);
+  if (layoutCache.size > 200) layoutCache.clear();
+  const segs = text.split(/(\*[^*]+\*)/).filter(Boolean), words = [];
+  segs.forEach(sg => { const hl = /^\*[^*]+\*$/.test(sg); const raw = hl ? sg.slice(1, -1) : sg; raw.split(/\s+/).filter(Boolean).forEach(w => words.push({ s: pal.upper ? w.toUpperCase() : w, hl })); });
+  let size = Math.min(W, H * .62) * .13 * mul, lines;
+  for (let it = 0; it < 14; it++) {
+    ctx.font = `${pal.weight} ${size}px ${pal.font}`;
+    const sp = ctx.measureText(' ').width, maxW = W * .86; lines = []; let cur = null, tooWide = false;
+    words.forEach(w => { const ww = ctx.measureText(w.s).width; if (ww > maxW) tooWide = true; if (!cur || cur.w + sp + ww > maxW) { cur = { words: [], w: 0 }; lines.push(cur); } cur.w += (cur.words.length ? sp : 0) + ww; cur.words.push({ ...w, w: ww }); });
+    if (!tooWide && lines.length <= 6) break; size *= .88;
+  }
+  const lh = size * 1.08, items = [], wlist = []; let ci = 0, wi = 0;
+  lines.forEach((ln, li) => {
+    const y = (li - (lines.length - 1) / 2) * lh; let x = -ln.w / 2; const sp = ctx.measureText(' ').width;
+    ln.words.forEach(w => { wlist.push({ x, w: w.w, y, hl: w.hl, li }); for (const ch of w.s) { const cw = ctx.measureText(ch).width; items.push({ ch, x: x + cw / 2, cw, y, ci: ci++, wi, li, hl: w.hl }); x += cw; } x += sp; wi++; });
+  });
+  const L = { size, lh, items, words: wlist, nChars: items.length, nWords: wi, nLines: lines.length };
+  layoutCache.set(key, L); return L;
+}
+
+/* ---------- Render Engine ---------- */
+const cv = $('#cv'), ctx = cv.getContext('2d');
+const offA = document.createElement('canvas'), offB = document.createElement('canvas');
+const state = { title: 'Новый проект', format: '9:16', style: 'kinetic_dark', subs: true, scenes: [] };
+const SIZES = { '9:16': [720, 1280], '16:9': [1280, 720], '1:1': [1080, 1080] };
+const pal = () => STYLES[state.style] || STYLES.kinetic_dark;
+const total = () => state.scenes.reduce((a, s) => a + s.dur, 0);
+function locate(t) { let a = 0; const n = state.scenes.length; for (let i = 0; i < n; i++) { const d = state.scenes[i].dur; if (t < a + d || i === n - 1) return { i, lt: clamp(t - a, 0, d) }; a += d; } return { i: 0, lt: 0 }; }
+const startOf = i => state.scenes.slice(0, i).reduce((a, s) => a + s.dur, 0);
+
+function bgInfo(kind, p) {
+  if (kind === 'light') return { fill: '#f1f1ec', fg: '#0a0a0a', hl: '#0a0a0a', bar: p.accent, fx: '#0a0a0a', subFg: '#0a0a0a', subStroke: '#f1f1ec' };
+  if (kind === 'accent') return { fill: p.accent, fg: '#0a0a0a', hl: '#0a0a0a', bar: '#0a0a0a', fx: '#0a0a0a', subFg: '#0a0a0a', subStroke: p.accent };
+  return { fill: p.bg, fg: p.fg, hl: p.accent, bar: p.accent, fx: p.accent, subFg: p.fg, subStroke: p.bg };
+}
+function drawBg(c, kind, lt, W, H, p) {
+  const bi = bgInfo(kind, p); c.fillStyle = bi.fill; c.fillRect(0, 0, W, H);
+  if (kind === 'grid') { c.strokeStyle = hexA(p.accent, .16); c.lineWidth = 2; const st = W / 8, off = (lt * st * .6) % st; c.beginPath(); for (let x = -st + off; x < W + st; x += st) { c.moveTo(x, 0); c.lineTo(x, H); } for (let y = -st + off; y < H + st; y += st) { c.moveTo(0, y); c.lineTo(W, y); } c.stroke(); }
+  else if (kind === 'rays') { c.save(); c.translate(W / 2, H / 2); c.rotate(lt * .25); c.fillStyle = hexA(p.accent, .1); const n = 14, R = Math.hypot(W, H); for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, R, a, a + Math.PI / n); c.closePath(); c.fill(); } c.restore(); }
+  else if (kind === 'glow') { const g = c.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * (.55 + .05 * Math.sin(lt * 3))); g.addColorStop(0, hexA(p.accent, .45)); g.addColorStop(1, hexA(p.accent, 0)); c.fillStyle = g; c.fillRect(0, 0, W, H); }
+  return bi;
+}
+function drawText(c, sc, lt, W, H, p, bi, seed) {
+  if (!sc.text) return;
+  const L = layout(c, sc.text, W, H, p, sc.size || 1), A = ANIMS[sc.anim] || ANIMS.pop;
+  const prog = clamp(lt / (A.dur / p.speed), 0, 1), cy = H * (sc.subtitle ? .42 : .5), cx = W / 2;
+  const n = A.unit === 'char' ? L.nChars : A.unit === 'word' ? L.nWords : A.unit === 'line' ? L.nLines : 1;
+  c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `${p.weight} ${L.size}px ${p.font}`; c.lineJoin = 'round';
+  for (const it of L.items) {
+    const k = A.unit === 'char' ? it.ci : A.unit === 'word' ? it.wi : A.unit === 'line' ? it.li : 0;
+    const q = n > 1 ? clamp((prog - (k / (n - 1)) * A.stagger) / (1 - A.stagger), 0, 1) : prog;
+    const st = A.fn(q, { k, n, item: it, L, dir: sc.dir, lt, R: j => hrand(seed + it.ci, j) });
+    const a = st.a === undefined ? 1 : st.a; if (a <= 0.001) continue;
+    c.save();
+    if (st.clip) { c.beginPath(); c.rect(0, cy + it.y - L.lh * .55, W, L.lh * 1.1); c.clip(); }
+    c.translate(cx + it.x + (st.x || 0) * L.size, cy + it.y + (st.y || 0) * L.size);
+    if (st.r) c.rotate(st.r);
+    const s = st.s === undefined ? 1 : st.s; c.scale(st.sx === undefined ? s : st.sx, st.sy === undefined ? s : st.sy);
+    c.globalAlpha = clamp(a, 0, 1);
+    const col = it.hl ? bi.hl : bi.fg;
+    if (st.gl > .02) { const o = st.gl * L.size * .07; c.fillStyle = '#ff2bd6'; c.fillText(it.ch, -o, 0); c.fillStyle = '#00f0ff'; c.fillText(it.ch, o, 0); }
+    if (st.glow) { c.shadowColor = it.hl ? p.accent : bi.fg; c.shadowBlur = st.glow * L.size * .45; }
+    if (st.blur) { c.shadowColor = col; c.shadowBlur = st.blur * L.size * .4; }
+    c.fillStyle = col; c.fillText(it.ch, 0, 0);
+    c.restore();
+  }
+  // маркер под выделенными словами
+  const bp = clamp((prog - .55) / .45, 0, 1);
+  if (bp > 0) for (const w of L.words) if (w.hl) { c.fillStyle = bi.bar; c.fillRect(cx + w.x, cy + w.y + L.size * .46, w.w * E.expo(bp), L.size * .07); }
+}
+function drawSub(c, text, lt, W, H, p, bi) {
+  if (!text || !state.subs || lt < .3) return;
+  const ws = text.replace(/\*/g, '').split(/\s+/).filter(Boolean).map(w => p.upper ? w.toUpperCase() : w);
+  if (!ws.length) return;
+  const size = Math.min(W, H * .62) * .062; c.font = `${p.weight} ${size}px ${p.font}`; c.textBaseline = 'middle'; c.textAlign = 'left';
+  const sp = size * .3, pad = size * .28, maxW = W * .84; let key = -1, best = 3;
+  ws.forEach((w, i) => { if (w.length > best) { best = w.length; key = i; } });
+  const lines = []; let cur = null;
+  ws.forEach((w, i) => { const ww = c.measureText(w).width + (i === key ? pad * 2 : 0); if (!cur || cur.w + sp + ww > maxW) { cur = { w: 0, it: [] }; lines.push(cur); } cur.w += (cur.it.length ? sp : 0) + ww; cur.it.push({ w, ww, i }); });
+  const lh = size * 1.5, y0 = H * (H > W ? .78 : .86) - (lines.length - 1) * lh / 2;
+  lines.forEach((ln, li) => {
+    let x = (W - ln.w) / 2; const y = y0 + li * lh;
+    ln.it.forEach(o => {
+      const q = clamp((lt - .3 - o.i * .09) / .25, 0, 1);
+      if (q > 0) {
+        c.save(); c.translate(x + o.ww / 2, y); const s = E.back(q); c.scale(s, s); c.globalAlpha = Math.min(1, q * 3);
+        if (o.i === key) { c.fillStyle = p.accent; rr(c, -o.ww / 2, -size * .62, o.ww, size * 1.24, size * .25); c.fill(); c.fillStyle = '#0a0a0a'; c.textAlign = 'center'; c.fillText(o.w, 0, 0); }
+        else { c.textAlign = 'center'; c.lineWidth = size * .24; c.strokeStyle = bi.subStroke; c.strokeText(o.w, 0, 0); c.fillStyle = bi.subFg; c.fillText(o.w, 0, 0); }
+        c.restore();
+      }
+      x += o.ww + sp;
+    });
+  });
+}
+function drawScene(c, sc, idx, lt) {
+  const W = c.canvas.width, H = c.canvas.height, p = pal(), seed = idx * 13.7 + 1;
+  c.save(); c.globalAlpha = 1; c.shadowBlur = 0;
+  const bi = drawBg(c, sc.bg, lt, W, H, p);
+  c.save(); const zs = 1 + .04 * (lt / sc.dur); c.translate(W / 2, H / 2); c.scale(zs, zs); c.translate(-W / 2, -H / 2); // лёгкий «наезд» камеры
+  (sc.fx || []).forEach((f, j) => { if (FX[f]) FX[f].draw(c, W, H, lt, sc.dur, bi.fx, seed + j * 3.1); });
+  drawText(c, sc, lt, W, H, p, bi, seed);
+  c.restore();
+  drawSub(c, sc.subtitle, lt, W, H, p, bi);
+  c.restore();
+}
+// Детерминированная функция: кадр зависит только от времени t (сек) и состояния проекта.
+function renderFrame(c, t) {
+  const W = c.canvas.width, H = c.canvas.height;
+  if (!state.scenes.length) { c.fillStyle = pal().bg; c.fillRect(0, 0, W, H); c.fillStyle = '#555'; c.textAlign = 'center'; c.font = `700 ${W * .05}px Inter,sans-serif`; c.fillText('Напиши запрос и нажми «Создать»', W / 2, H / 2); return; }
+  const { i, lt } = locate(t), sc = state.scenes[i];
+  drawScene(c, sc, i, lt);
+  const T = Math.min(.4, sc.dur * .5);
+  if (i > 0 && sc.trans !== 'cut' && lt < T && TRANS[sc.trans]) {
+    const pv = state.scenes[i - 1]; drawScene(offA.getContext('2d'), pv, i - 1, pv.dur);
+    c.save(); TRANS[sc.trans].draw(c, offA, lt / T, W, H, pal(), offB); c.restore();
+  }
+}
+function setFormat(fmt) {
+  const [w, h] = SIZES[fmt]; state.format = fmt; cv.width = offA.width = w; cv.height = offA.height = h; layoutCache.clear(); renderNow();
+}
+
+/* ---------- Timeline / Scenes ---------- */
+function normScene(s) {
+  return { id: uid(), text: String(s.text || '').slice(0, 160), subtitle: String(s.subtitle || '').slice(0, 100), dur: clamp(+s.dur || 2.5, .8, 12), bg: pickIn(s.bg, ENGINE.bg, 'dark'), anim: pickIn(s.anim, ENGINE.anim, 'pop'), trans: pickIn(s.trans, ENGINE.trans, 'cut'), fx: (Array.isArray(s.fx) ? s.fx : []).map(String).filter((f, i, a) => ENGINE.fx.includes(f) && a.indexOf(f) === i).slice(0, 3), dir: pickIn(s.dir, ENGINE.dir, 'left'), size: clamp(+s.size || 1, .5, 1.5) };
+}
+function loadScenario(sc) {
+  if (!sc || !Array.isArray(sc.scenes)) throw new Error('В сценарии нет сцен');
+  const scenes = sc.scenes.map(normScene).filter(s => s.text);
+  if (!scenes.length) throw new Error('В сценарии нет сцен с текстом');
+  state.scenes = scenes; if (sc.title) state.title = String(sc.title).slice(0, 80);
+  if (sc.format && SIZES[sc.format]) state.format = sc.format;
+  if (sc.style && STYLES[sc.style]) state.style = sc.style;
+  layoutCache.clear();
+}
+function distribute(totalSec) {
+  const w = state.scenes.map(s => Math.max(8, s.text.length + s.subtitle.length * .5)), sum = w.reduce((a, b) => a + b, 0);
+  state.scenes.forEach((s, i) => s.dur = Math.round(clamp(w[i] / sum * totalSec, 1, 12) * 10) / 10);
+}
+
+/* ---------- Director ---------- */
+const STOP = new Set('сделай создай сделать видео ролик пожалуйста хочу нужно мне про что как это эти для или чтобы который которые динамичное динамичный динамичную крупными крупные'.split(' '));
+function localDirector(brief, o) {
+  const st = STYLES[o.style], words = brief.replace(/[«»"“”]/g, '').split(/\s+/).filter(w => w.length > 1).map(w => w.replace(/[.,!?:;()]+$/g, '')).filter(Boolean);
+  const core = words.filter(w => !STOP.has(w.toLowerCase())), body = core.length ? core : words, chunks = [];
+  for (let i = 0; i < body.length && chunks.length < 10; i += 4) chunks.push(body.slice(i, i + 4));
+  const h = brief.length, hooks = ['ТЫ ДАЖЕ НЕ *ПРЕДСТАВЛЯЕШЬ*', 'СТОП. *СМОТРИ*', 'ЭТО МЕНЯЕТ *ВСЁ*', 'ТЫ ЭТОГО НЕ *ЖДАЛ*'], hs = ['ЧТО БУДЕТ ДАЛЬШЕ', 'ДАЛЬШЕ — ЖЁСТЧЕ', 'ДОСМОТРИ ДО КОНЦА', 'ЭТО ТОЛЬКО НАЧАЛО'], ends = ['НАЧНИ *СЕЙЧАС*', 'ЭТО ТОЛЬКО *НАЧАЛО*', 'ТВОЙ *ХОД*'];
+  const raw = [{ text: hooks[h % 4], subtitle: hs[h % 4] }];
+  chunks.forEach(ch => { const head = ch.slice(0, 3), tail = ch.slice(3); let li = 0; head.forEach((w, i) => { if (w.length > head[li].length) li = i; }); const t = head.map((w, i) => i === li && w.length > 3 ? '*' + w + '*' : w).join(' '); raw.push({ text: t, subtitle: tail.join(' ') }); });
+  raw.push({ text: ends[h % 3], subtitle: '' });
+  const bgs = ['dark', 'grid', 'accent', 'rays', 'light', 'glow'], wts = raw.map(r => Math.max(10, r.text.length + r.subtitle.length * .5)), sum = wts.reduce((a, b) => a + b, 0);
+  let prevA = '', prevT = '';
+  const scenes = raw.map((r, i) => {
+    let an = st.anims[(i * 2 + h) % st.anims.length]; if (an === prevA) an = st.anims[(i * 2 + h + 1) % st.anims.length]; prevA = an;
+    let tr = st.trans[(i + h) % st.trans.length]; if (tr === prevT && st.trans.length > 1) tr = st.trans[(i + h + 1) % st.trans.length]; prevT = tr;
+    const last = i === raw.length - 1;
+    return { ...r, dur: Math.round(clamp(wts[i] / sum * o.dur, 1.4, 6) * 10) / 10, bg: i === 0 ? 'dark' : last ? 'accent' : bgs[i % bgs.length], anim: i === 0 ? 'zoom' : an, trans: i === 0 ? 'cut' : tr, fx: [st.fx[i % st.fx.length]], dir: ['left', 'right', 'up', 'down'][i % 4], size: 1 };
+  });
+  return { title: body.slice(0, 3).join(' ').toUpperCase() || 'VIDEO', scenes };
+}
+const Worker = {
+  url: () => (localStorage.getItem('vc.worker') || '').replace(/\/+$/, ''),
+  async call(path, body, ms = 150000) {
+    const ac = new AbortController(), tm = setTimeout(() => ac.abort(), ms);
+    try {
+      const r = await fetch(this.url() + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ac.signal });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || 'Worker ' + r.status); }
+      return r;
+    } catch (e) { throw new Error(e.name === 'AbortError' ? 'Worker не ответил вовремя' : e.message); } finally { clearTimeout(tm); }
+  }
+};
+async function direct(brief) {
+  const o = { style: state.style, dur: +$('#durRange').value, format: state.format };
+  if (Worker.url()) {
+    try { const j = await (await Worker.call('/director', { brief, dur: o.dur, format: o.format, style: o.style })).json(); if (!j.ok) throw new Error(j.error); $('#srcTag').textContent = 'Director: Gemini'; return j.scenario; }
+    catch (e) { toast('ИИ недоступен: ' + e.message + '. Включён локальный Director.', true); }
+  }
+  $('#srcTag').textContent = 'Director: локальный'; return localDirector(brief, o);
+}
+
+/* ---------- Audio Engine ---------- */
+const AudioEng = {
+  ctx: null, tracks: { music: null, voice: null }, vol: { music: .6, voice: 1 }, fi: .5, fo: 1, srcs: [],
+  ensure() { if (!this.ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) throw new Error('Web Audio не поддерживается'); this.ctx = new AC(); } if (this.ctx.state === 'suspended') this.ctx.resume(); return this.ctx; },
+  async load(kind, buf) { this.tracks[kind] = await this.ensure().decodeAudioData(buf); },
+  start(offset, tot, dest) {
+    this.stop(); if (!this.tracks.music && !this.tracks.voice) return; const c = this.ensure();
+    for (const kind of ['music', 'voice']) {
+      const buf = this.tracks[kind]; if (!buf || offset >= buf.duration) continue;
+      const src = c.createBufferSource(), g = c.createGain(), now = c.currentTime, lv = this.vol[kind], rem = Math.max(.05, tot - offset);
+      src.buffer = buf; src.connect(g); g.connect(dest || c.destination);
+      if (this.fi > 0 && offset < this.fi) { g.gain.setValueAtTime(lv * offset / this.fi, now); g.gain.linearRampToValueAtTime(lv, now + this.fi - offset); } else g.gain.setValueAtTime(lv, now);
+      if (this.fo > 0) { g.gain.setValueAtTime(lv, now + Math.max(0, rem - this.fo)); g.gain.linearRampToValueAtTime(0, now + rem); }
+      src.start(now, offset); src.stop(now + rem); this.srcs.push(src);
+    }
+  },
+  stop() { this.srcs.forEach(s => { try { s.stop(); } catch { } }); this.srcs = []; },
+  info() { const m = this.tracks.music, v = this.tracks.voice; return (m ? `Музыка ${m.duration.toFixed(1)} с. ` : '') + (v ? `Озвучка ${v.duration.toFixed(1)} с.` : '') || 'Звук не подключён. TTS требует адрес Worker в настройках.'; }
+};
+
+/* ---------- Preview loop ---------- */
+const P = { playing: false, t: 0, t0: 0, raf: 0, exporting: false };
+function renderNow() { if (!P.exporting) renderFrame(ctx, P.t); updateTime(); }
+function play() {
+  if (P.exporting) return; const tot = total(); if (!tot) return toast('Сначала создай сцены', true);
+  if (P.t >= tot - .01) P.t = 0;
+  try { AudioEng.start(P.t, tot); } catch (e) { toast('Аудио: ' + e.message, true); }
+  P.playing = true; P.t0 = performance.now() - P.t * 1000; $('#btnPlay').textContent = '❚❚'; loop();
+}
+function pause() { P.playing = false; cancelAnimationFrame(P.raf); AudioEng.stop(); $('#btnPlay').textContent = '▶'; }
+function loop() {
+  if (!P.playing) return; P.t = (performance.now() - P.t0) / 1000;
+  if (P.t >= total()) { P.t = total(); renderNow(); pause(); return; }
+  renderNow(); P.raf = requestAnimationFrame(loop);
+}
+function updateTime() { const tot = total(); $('#timeLbl').textContent = `${P.t.toFixed(1)} / ${tot.toFixed(1)}`; if (!scrubbing) $('#scrub').value = tot ? Math.round(P.t / tot * 1000) : 0; }
+let scrubbing = false;
+
+/* ---------- Export Engine ---------- */
+const CANDS = [['video/webm;codecs=vp9,opus', 'WebM (VP9)'], ['video/webm;codecs=vp8,opus', 'WebM (VP8)'], ['video/webm', 'WebM'], ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'MP4 (H.264)'], ['video/mp4', 'MP4']];
+function supportedFormats() { if (typeof MediaRecorder === 'undefined') return []; return CANDS.filter(([m]) => { try { return MediaRecorder.isTypeSupported(m); } catch { return false; } }); }
+let cancelExp = false, lastUrl = null, wake = null;
+async function exportVideo() {
+  if (P.exporting) { cancelExp = true; return; }
+  const tot = total(); if (!tot) return toast('Нет сцен для экспорта', true);
+  if (!cv.captureStream || typeof MediaRecorder === 'undefined') return toast('Этот браузер не умеет записывать Canvas (captureStream/MediaRecorder).', true);
+  const mime = $('#expFmt').value; if (!mime) return toast('Нет поддерживаемых форматов записи в этом браузере.', true);
+  const fps = +$('#expFps').value, bps = +$('#expQ').value;
+  pause(); P.exporting = true; cancelExp = false; $('#btnExport').textContent = 'Отменить экспорт'; $('#dl').style.display = 'none';
+  if (lastUrl) { URL.revokeObjectURL(lastUrl); lastUrl = null; }
+  try { if (navigator.wakeLock) wake = await navigator.wakeLock.request('screen'); } catch { }
+  $('#expHint').textContent = 'Идёт запись в реальном времени. Не сворачивай вкладку и не блокируй экран.';
+  let rec, stream, adest = null; const chunks = [];
+  try {
+    await (document.fonts && document.fonts.ready);
+    renderFrame(ctx, 0); stream = cv.captureStream(fps);
+    if (AudioEng.tracks.music || AudioEng.tracks.voice) { adest = AudioEng.ensure().createMediaStreamDestination(); adest.stream.getAudioTracks().forEach(t => stream.addTrack(t)); }
+    rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bps });
+    rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    const stopped = new Promise((res, rej) => { rec.onstop = res; rec.onerror = e => rej(e.error || new Error('Ошибка MediaRecorder')); });
+    rec.start(500);
+    if (adest) AudioEng.start(0, tot, adest);
+    const t0 = performance.now(); const fi = 1000 / fps; let last = -1e9;
+    await new Promise(res => {
+      const step = () => {
+        const now = performance.now(), t = (now - t0) / 1000;
+        if (now - last >= fi - 2) { last = now; renderFrame(ctx, Math.min(t, tot - .001)); }
+        $('#expProg').style.width = Math.min(100, t / tot * 100).toFixed(1) + '%';
+        if (cancelExp || t >= tot + .15) return res();
+        requestAnimationFrame(step);
+      }; step();
+    });
+    AudioEng.stop(); if (rec.state !== 'inactive') rec.stop(); await stopped;
+    if (cancelExp) { $('#expHint').textContent = 'Экспорт отменён.'; $('#expProg').style.width = '0'; }
+    else {
+      const blob = new Blob(chunks, { type: mime.split(';')[0] }); chunks.length = 0;
+      if (!blob.size) throw new Error('Получен пустой файл');
+      lastUrl = URL.createObjectURL(blob); const ext = mime.startsWith('video/mp4') ? 'mp4' : 'webm';
+      const a = $('#dl'); a.href = lastUrl; a.download = (state.title || 'video').replace(/[^\wа-яё-]+/gi, '_') + '.' + ext; a.style.display = 'block'; a.textContent = `Скачать .${ext} (${(blob.size / 1048576).toFixed(1)} МБ)`;
+      $('#expHint').textContent = 'Готово. Формат файла: ' + mime.split(';')[0] + '.'; $('#expProg').style.width = '100%';
+    }
+  } catch (e) { console.error(e); toast('Ошибка экспорта: ' + (e.message || e), true); $('#expHint').textContent = 'Ошибка экспорта.'; }
+  finally {
+    try { stream && stream.getTracks().forEach(t => t.stop()); } catch { }
+    try { wake && wake.release(); } catch { } wake = null;
+    P.exporting = false; $('#btnExport').textContent = 'Экспортировать'; renderNow();
+  }
+}
+
+/* ---------- Storage (IndexedDB) ---------- */
+const DB = {
+  _db: null,
+  open() { if (this._db) return Promise.resolve(this._db); return new Promise((res, rej) => { if (!window.indexedDB) return rej(new Error('IndexedDB недоступна')); const r = indexedDB.open('videocreate', 1); r.onupgradeneeded = () => r.result.createObjectStore('projects', { keyPath: 'id' }); r.onsuccess = () => { this._db = r.result; res(r.result); }; r.onerror = () => rej(r.error); }); },
+  async run(mode, fn) { const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction('projects', mode), rq = fn(t.objectStore('projects')); t.oncomplete = () => res(rq && rq.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); },
+  put(o) { return this.run('readwrite', s => s.put(o)); }, all() { return this.run('readonly', s => s.getAll()); }, get(id) { return this.run('readonly', s => s.get(id)); }, del(id) { return this.run('readwrite', s => s.delete(id)); }
+};
+const snapshot = () => ({ title: state.title, format: state.format, style: state.style, subs: state.subs, scenes: state.scenes.map(({ id, ...r }) => r) });
+let autoT, curId = null;
+function autosave() { clearTimeout(autoT); autoT = setTimeout(() => DB.put({ id: '__autosave__', name: 'autosave', updated: Date.now(), data: snapshot() }).catch(() => { }), 700); }
+async function refreshProjects() {
+  const box = $('#projList');
+  try {
+    const list = (await DB.all()).filter(p => p.id !== '__autosave__').sort((a, b) => b.updated - a.updated);
+    box.innerHTML = list.length ? list.map(p => `<div class="proj" data-id="${p.id}"><span>${esc(p.name)}</span><button class="btn" data-a="open">Открыть</button><button class="btn" data-a="dup">⧉</button><button class="btn" data-a="del">✕</button></div>`).join('') : '<div class="hint">Сохранённых проектов нет.</div>';
+  } catch (e) { box.innerHTML = '<div class="hint bad">Хранилище недоступно: ' + esc(e.message) + '</div>'; }
+}
+function applyData(d) { loadScenario(d); if (d.subs !== undefined) state.subs = !!d.subs; syncUI(); setFormat(state.format); P.t = 0; renderNow(); renderScenes(); }
+
+/* ---------- UI ---------- */
+function chips(id, items, cur, on) { const box = $(id); box.innerHTML = items.map(([v, l]) => `<button class="chip${v === cur ? ' on' : ''}" data-v="${v}">${esc(l)}</button>`).join(''); box.onclick = e => { const b = e.target.closest('.chip'); if (!b) return; box.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === b)); on(b.dataset.v); }; }
+function syncUI() {
+  chips('#fmtChips', [['9:16', '9:16 TikTok'], ['16:9', '16:9 YouTube'], ['1:1', '1:1']], state.format, v => { setFormat(v); autosave(); });
+  chips('#styleChips', Object.values(STYLES).map(s => [s.id, s.name]), state.style, async v => { state.style = v; await loadFont(); layoutCache.clear(); renderNow(); autosave(); });
+  $('#subsOn').checked = state.subs; $('#projName').value = state.title;
+}
+async function loadFont() { const p = pal(); try { await document.fonts.load(`${p.weight} 40px ${p.font}`); } catch { } }
+const opt = (list, cur, lab) => list.map(v => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(lab ? lab(v) : v)}</option>`).join('');
+function renderScenes() {
+  const box = $('#sceneList'); let a = 0;
+  box.innerHTML = state.scenes.map((s, i) => { const st = a; a += s.dur; return `<div class="scene" data-i="${i}"><div class="sh"><b>#${i + 1}</b><span class="t" data-a="seek">${st.toFixed(1)}–${a.toFixed(1)} с</span><button data-a="up">↑</button><button data-a="down">↓</button><button data-a="dup">⧉</button><button data-a="del">✕</button></div>
+    <input type="text" data-k="text" value="${esc(s.text)}" placeholder="Текст (*слово* — выделение)"><input type="text" data-k="subtitle" value="${esc(s.subtitle)}" placeholder="Субтитр">
+    <div class="row"><label class="l">Длит., с<input type="number" data-k="dur" value="${s.dur}" min="0.8" max="12" step="0.1"></label><label class="l">Анимация<select data-k="anim">${opt(ENGINE.anim, s.anim, v => ANIMS[v].name)}</select></label></div>
+    <div class="row"><label class="l">Переход<select data-k="trans">${opt(ENGINE.trans, s.trans, v => TRANS[v].name)}</select></label><label class="l">Фон<select data-k="bg">${opt(ENGINE.bg, s.bg, v => LABEL[v])}</select></label><label class="l">Элемент<select data-k="fx"><option value="">—</option>${opt(ENGINE.fx, s.fx[0], v => FX[v].name)}</select></label></div></div>`; }).join('') || '<div class="hint">Сцен пока нет — создай видео из запроса или добавь сцену вручную.</div>';
+  $('#totalHint').textContent = `Сцен: ${state.scenes.length} · общая длительность ${total().toFixed(1)} с`;
+}
+$('#sceneList').addEventListener('input', e => {
+  const el = e.target, card = el.closest('.scene'); if (!card || !el.dataset.k) return; const s = state.scenes[+card.dataset.i], k = el.dataset.k;
+  if (k === 'dur') { const v = clamp(+el.value, .8, 12); if (!isFinite(v)) return; s.dur = v; } else if (k === 'fx') s.fx = el.value ? [el.value] : []; else s[k] = el.value;
+  layoutCache.clear(); P.t = clamp(startOf(+card.dataset.i) + .01, 0, total()); if (k === 'anim' || k === 'trans') P.t = startOf(+card.dataset.i) + (k === 'trans' ? .12 : .3);
+  pause(); renderNow(); $('#totalHint').textContent = `Сцен: ${state.scenes.length} · общая длительность ${total().toFixed(1)} с`; autosave();
+});
+$('#sceneList').addEventListener('click', e => {
+  const b = e.target.closest('[data-a]'), card = e.target.closest('.scene'); if (!b || !card) return; const i = +card.dataset.i, a = b.dataset.a, S = state.scenes;
+  if (a === 'seek') { pause(); P.t = startOf(i) + .01; renderNow(); document.querySelectorAll('.scene').forEach(x => x.classList.toggle('sel', x === card)); return; }
+  if (a === 'up' && i > 0) [S[i - 1], S[i]] = [S[i], S[i - 1]];
+  else if (a === 'down' && i < S.length - 1) [S[i + 1], S[i]] = [S[i], S[i + 1]];
+  else if (a === 'dup') S.splice(i + 1, 0, { ...S[i], id: uid(), fx: [...S[i].fx] });
+  else if (a === 'del') { if (S.length === 1 && !confirm('Удалить последнюю сцену?')) return; S.splice(i, 1); }
+  else return;
+  P.t = clamp(P.t, 0, total()); renderScenes(); renderNow(); autosave();
+});
+$('#btnAddScene').onclick = () => { const p = pal(); state.scenes.push(normScene({ text: 'НОВАЯ *СЦЕНА*', dur: 2.2, bg: 'dark', anim: p.anims[0], trans: p.trans[0], fx: [p.fx[0]] })); renderScenes(); pause(); P.t = startOf(state.scenes.length - 1) + .5; renderNow(); autosave(); };
+$('#btnFit').onclick = () => { if (!state.scenes.length) return; const tg = +$('#durRange').value; distribute(tg); renderScenes(); renderNow(); autosave(); toast(`Время распределено: ${total().toFixed(1)} с`); };
+$('#durRange').oninput = e => $('#durVal').textContent = e.target.value;
+$('#subsOn').onchange = e => { state.subs = e.target.checked; renderNow(); autosave(); };
+
+$('#btnCreate').onclick = async () => {
+  const brief = $('#brief').value.trim(); if (!brief) return toast('Опиши, какое видео нужно', true);
+  const b = $('#btnCreate'); b.disabled = true; b.textContent = 'Создаю сценарий…'; pause();
+  try { await loadFont(); const sc = await direct(brief); loadScenario(sc); P.t = 0; renderScenes(); renderNow(); autosave(); $('#projName').value = state.title; toast(`Готово: ${state.scenes.length} сцен, ${total().toFixed(1)} с`); play(); }
+  catch (e) { console.error(e); toast('Не удалось создать: ' + e.message, true); }
+  finally { b.disabled = false; b.textContent = 'Создать видео'; }
+};
+$('#btnAiEdit').onclick = async () => {
+  const ins = $('#aiEdit').value.trim(); if (!ins) return toast('Напиши, что поправить', true);
+  if (!Worker.url()) return toast('Правка через ИИ требует адрес Worker в настройках. Сцены можно править вручную ниже.', true);
+  if (!state.scenes.length) return toast('Сначала создай сцены', true);
+  const b = $('#btnAiEdit'); b.disabled = true; b.textContent = '…'; pause();
+  try { const j = await (await Worker.call('/edit', { instruction: ins, scenario: snapshot() })).json(); if (!j.ok) throw new Error(j.error); loadScenario(j.scenario); P.t = 0; renderScenes(); renderNow(); autosave(); $('#aiEdit').value = ''; toast('Правка применена'); }
+  catch (e) { toast('Правка не удалась: ' + e.message, true); } finally { b.disabled = false; b.textContent = 'Править'; }
+};
+$('#btnPlay').onclick = () => P.playing ? pause() : play();
+const scrub = $('#scrub');
+scrub.addEventListener('pointerdown', () => { scrubbing = true; });
+scrub.addEventListener('input', () => { const was = P.playing; pause(); P.t = scrub.value / 1000 * total(); renderNow(); scrubbing = true; if (was) { scrubbing = false; } });
+scrub.addEventListener('change', () => { scrubbing = false; });
+
+/* Audio UI */
+$('#musicFile').onchange = async e => { const f = e.target.files[0]; if (!f) return; try { await AudioEng.load('music', await f.arrayBuffer()); $('#audioHint').textContent = AudioEng.info(); toast('Музыка загружена'); } catch { toast('Не удалось прочитать аудиофайл (формат не поддерживается браузером)', true); } };
+$('#volMusic').oninput = e => { AudioEng.vol.music = e.target.value / 100; };
+$('#fadeIn').onchange = e => { AudioEng.fi = clamp(+e.target.value || 0, 0, 5); };
+$('#fadeOut').onchange = e => { AudioEng.fo = clamp(+e.target.value || 0, 0, 5); };
+$('#btnClearAudio').onclick = () => { pause(); AudioEng.tracks.music = AudioEng.tracks.voice = null; $('#musicFile').value = ''; $('#audioHint').textContent = AudioEng.info(); };
+$('#btnTts').onclick = async () => {
+  if (!Worker.url()) return toast('Для озвучки укажи адрес Worker в настройках.', true);
+  if (!state.scenes.length) return toast('Сначала создай сцены', true);
+  const b = $('#btnTts'); b.disabled = true; b.textContent = 'Озвучиваю…'; pause();
+  try {
+    const text = state.scenes.map(s => s.text.replace(/\*/g, '')).join('. ');
+    const r = await Worker.call('/tts', { text, voice: $('#voiceSel').value }, 125000);
+    await AudioEng.load('voice', await r.arrayBuffer());
+    if ($('#fitVoice').checked) { distribute(AudioEng.tracks.voice.duration + .4); renderScenes(); }
+    renderNow(); autosave(); $('#audioHint').textContent = AudioEng.info(); toast('Озвучка готова');
+  } catch (e) { toast('TTS: ' + e.message, true); } finally { b.disabled = false; b.textContent = 'Озвучить (TTS)'; }
+};
+
+/* Export UI */
+$('#btnExport').onclick = exportVideo;
+function initCompat() {
+  const f = supportedFormats(), sel = $('#expFmt'); sel.innerHTML = f.map(([m, l]) => `<option value="${m}">${l}</option>`).join('') || '<option value="">Недоступно</option>';
+  const ios = /iP(hone|ad|od)/.test(navigator.userAgent), cap = !!(cv.captureStream && window.MediaRecorder);
+  $('#compat').innerHTML = cap ? `Запись Canvas: <span class="ok">поддерживается</span>. Форматы: ${f.map(x => x[1]).join(', ') || 'нет'}.${f.some(x => x[0].startsWith('video/webm')) ? '' : ' WebM недоступен в этом браузере — файл будет в MP4.'}${ios ? ' На iPhone запись идёт только пока вкладка открыта и экран включён.' : ''}` : '<span class="bad">Этот браузер не поддерживает captureStream/MediaRecorder — экспорт недоступен. Открой сайт в Chrome, Edge или свежем Safari.</span>';
+  if (!cap) $('#btnExport').disabled = true;
+}
+
+/* Projects UI */
+$('#btnSave').onclick = async () => { state.title = $('#projName').value.trim() || state.title; try { const id = curId || uid(); curId = id; await DB.put({ id, name: state.title, updated: Date.now(), data: snapshot() }); await refreshProjects(); toast('Проект сохранён'); } catch (e) { toast('Не удалось сохранить: ' + e.message, true); } };
+$('#projList').addEventListener('click', async e => {
+  const b = e.target.closest('[data-a]'), row = e.target.closest('.proj'); if (!b || !row) return; const id = row.dataset.id;
+  try {
+    const p = await DB.get(id); if (!p) return;
+    if (b.dataset.a === 'open') { pause(); curId = id; applyData(p.data); toast('Открыт: ' + p.name); }
+    else if (b.dataset.a === 'dup') { await DB.put({ ...p, id: uid(), name: p.name + ' (копия)', updated: Date.now() }); await refreshProjects(); }
+    else if (b.dataset.a === 'del') { if (!confirm('Удалить проект «' + p.name + '»?')) return; await DB.del(id); if (curId === id) curId = null; await refreshProjects(); }
+  } catch (err) { toast('Ошибка хранилища: ' + err.message, true); }
+});
+$('#btnJsonOut').onclick = () => { const url = URL.createObjectURL(new Blob([JSON.stringify(snapshot(), null, 2)], { type: 'application/json' })), a = document.createElement('a'); a.href = url; a.download = (state.title || 'project').replace(/[^\wа-яё-]+/gi, '_') + '.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 4000); };
+$('#jsonIn').onchange = async e => { const f = e.target.files[0]; if (!f) return; try { pause(); curId = null; applyData(JSON.parse(await f.text())); toast('Проект импортирован'); } catch (err) { toast('Некорректный JSON проекта: ' + err.message, true); } e.target.value = ''; };
+
+/* Settings UI */
+$('#workerUrl').value = localStorage.getItem('vc.worker') || '';
+$('#btnWorkerSave').onclick = () => { const v = $('#workerUrl').value.trim(); if (v && !/^https:\/\//i.test(v)) return toast('Адрес должен начинаться с https://', true); localStorage.setItem('vc.worker', v); toast(v ? 'Адрес Worker сохранён' : 'Worker отключён — работает локальный Director'); $('#srcTag').textContent = v ? 'Director: Gemini (Worker)' : 'Director: локальный'; };
+$('#btnWorkerTest').onclick = async () => { const u = Worker.url() || $('#workerUrl').value.trim().replace(/\/+$/, ''); if (!u) return toast('Укажи адрес Worker', true); try { const j = await (await fetch(u + '/health')).json(); toast(j.ok ? `Worker работает (v${j.version}), ключ Gemini: ${j.hasKey ? 'есть' : 'НЕТ'}` : 'Worker ответил ошибкой', !j.ok || !j.hasKey); } catch (e) { toast('Worker недоступен: ' + e.message, true); } };
+
+/* ---------- Init ---------- */
+(async function init() {
+  initCompat(); $('#srcTag').textContent = Worker.url() ? 'Director: Gemini (Worker)' : 'Director: локальный';
+  try { const a = await DB.get('__autosave__'); if (a && a.data && a.data.scenes && a.data.scenes.length) { loadScenario(a.data); if (a.data.subs !== undefined) state.subs = !!a.data.subs; } } catch { }
+  syncUI(); setFormat(state.format); renderScenes(); refreshProjects();
+  await loadFont(); if (document.fonts) document.fonts.ready.then(() => { layoutCache.clear(); renderNow(); });
+  renderNow();
+})();
+</script>
+</body>
+</html>
