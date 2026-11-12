@@ -106,6 +106,7 @@ details summary{cursor:pointer;color:var(--dim);font-size:12px;letter-spacing:.1
   <label class="btn" style="text-align:center;cursor:pointer">Взять цвета с фото<input type="file" id="photoFile" accept="image/*" style="display:none"></label>
   <div id="swatches" class="chips"></div>
   <div class="hint" id="swHint">Фото не загружается на сервер: цвета считаются прямо в браузере. Нажми на цвет-образец, чтобы сделать его акцентом.</div>
+  <label class="l">VPN-графика (рисунки в свободном месте кадра)<select id="vpnSel"><option value="auto">Авто — если тема про VPN / интернет</option><option value="on">Всегда включена</option><option value="off">Авто-подбор выключен</option></select></label>
   <button class="btn" id="btnResetLook">Сбросить оформление до стиля</button>
 </section>
 
@@ -176,8 +177,10 @@ details summary{cursor:pointer;color:var(--dim);font-size:12px;letter-spacing:.1
 </div>
 <div id="toast"></div>
 
+<script src="vpn-library.js"></script>
 <script>
 'use strict';
+const VL = window.VPNLib || null; // библиотека VPN-графики (vpn-library.js)
 /* ============================================================
    VIDEO CREATE — каркас v0.1 (один файл)
    Модули (в будущем выносятся в /js/...):
@@ -304,15 +307,15 @@ regTrans('blur', 'Blur', (c, A, p, W, H, pal, tmp) => { const k = 1 + p * 14, w 
 regTrans('wipe', 'Wipe', (c, A, p, W, H, pal) => { const edge = E.inOut3(p) * W; c.save(); c.beginPath(); c.rect(edge, 0, W - edge, H); c.clip(); c.drawImage(A, 0, 0); c.restore(); c.strokeStyle = pal.accent; c.lineWidth = W * .01; c.beginPath(); c.moveTo(edge, 0); c.lineTo(edge, H); c.stroke(); });
 regTrans('spin', 'Fade', (c, A, p, W, H) => { c.save(); c.globalAlpha = 1 - E.inOut3(p); c.drawImage(A, 0, 0); c.restore(); }); // без вращения: текст никогда не наклоняется
 
-const ENGINE = { bg: ['dark', 'light', 'accent', 'grid', 'rays', 'glow'], trans: Object.keys(TRANS), anim: Object.keys(ANIMS), fx: Object.keys(FX), dir: ['up', 'down', 'left', 'right'] };
-const LABEL = { dark: 'Тёмный', light: 'Светлый', accent: 'Акцент', grid: 'Сетка', rays: 'Лучи', glow: 'Свечение' };
+const ENGINE = { bg: ['dark', 'light', 'accent', 'grid', 'rays', 'glow'].concat(VL ? VL.BG_IDS : []), trans: Object.keys(TRANS), anim: Object.keys(ANIMS), fx: Object.keys(FX), dir: ['up', 'down', 'left', 'right'] };
+const LABEL = { dark: 'Тёмный', light: 'Светлый', accent: 'Акцент', grid: 'Сетка', rays: 'Лучи', glow: 'Свечение', ...(VL ? VL.BG_NAMES : {}) };
 
 /* ---------- Layout текста ---------- */
 const layoutCache = new Map();
 /* ---------- Render Engine ---------- */
 const cv = $('#cv'), ctx = cv.getContext('2d');
 const offA = document.createElement('canvas'), offB = document.createElement('canvas');
-const state = { title: 'Новый проект', format: '9:16', style: 'kinetic_dark', subs: true, pace: 'norm', custom: {}, scenes: [] };
+const state = { title: 'Новый проект', format: '9:16', style: 'kinetic_dark', subs: true, pace: 'norm', custom: {}, vpn: 'auto', scenes: [] };
 const SIZES = { '9:16': [720, 1280], '16:9': [1280, 720], '1:1': [1080, 1080] };
 /* ---------- Оформление: шрифты и цвета пользователя ---------- */
 const FONTS = [
@@ -353,6 +356,7 @@ function drawBg(c, kind, lt, W, H, p) {
   if (kind === 'grid') { c.strokeStyle = hexA(p.accent, .16); c.lineWidth = 2; const st = W / 8, off = (lt * st * .6) % st; c.beginPath(); for (let x = -st + off; x < W + st; x += st) { c.moveTo(x, 0); c.lineTo(x, H); } for (let y = -st + off; y < H + st; y += st) { c.moveTo(0, y); c.lineTo(W, y); } c.stroke(); }
   else if (kind === 'rays') { c.save(); c.translate(W / 2, H / 2); c.rotate(lt * .25); c.fillStyle = hexA(p.accent, .1); const n = 14, R = Math.hypot(W, H); for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, R, a, a + Math.PI / n); c.closePath(); c.fill(); } c.restore(); }
   else if (kind === 'glow') { const g = c.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * (.55 + .05 * Math.sin(lt * 3))); g.addColorStop(0, hexA(p.accent, .45)); g.addColorStop(1, hexA(p.accent, 0)); c.fillStyle = g; c.fillRect(0, 0, W, H); }
+  else if (VL && VL.BG[kind]) VL.drawBg(c, kind, lt, W, H, { a: p.accent, f: p.fg, b: p.bg, s: p.accent }); // VPN-фоны из vpn-library.js
   return bi;
 }
 /* ---------- Kinetic-движок фразы ----------
@@ -532,6 +536,34 @@ function drawBeats(c, sc, lt, W, H, p, bi, seed, B, ix) {
   }
   c.restore();
 }
+/* ---------- VPN-графика (vpn-library.js): рисунки в свободном месте кадра рядом с текстом ---------- */
+let vpnMemo = { key: '', plan: [] };
+function vpnPlan() {
+  if (!VL) return [];
+  const key = state.vpn + '¦' + state.scenes.map(s => (s.art || '') + '¦' + s.text + ' ' + s.subtitle).join('¦¦');
+  if (vpnMemo.key !== key) {
+    const all = state.title + ' ' + state.scenes.map(s => s.text + ' ' + s.subtitle).join(' ');
+    const active = state.vpn === 'on' || (state.vpn === 'auto' && VL.isTopic(all));
+    vpnMemo = { key, plan: VL.plan(state.scenes.map(s => ({ text: s.text + ' ' + s.subtitle, art: s.art })), active) };
+  }
+  return vpnMemo.plan;
+}
+function drawVpnArt(c, sc, idx, lt, W, H, p, bi, B, ix) {
+  if (!VL || sc.demo) return;
+  const id = vpnPlan()[idx]; if (!id || !VL.ART[id]) return;
+  const ar = VL.ART[id].ar, b = B[ix], cur = VL.fitBox(b.L, W, H, ar), prv = ix > 0 ? VL.fitBox(B[ix - 1].L, W, H, ar) : null;
+  const e = 1 - Math.pow(1 - clamp((lt - b.t0) / .45, 0, 1), 3); let box, al = 1;
+  if (cur && prv) box = { x: prv.x + (cur.x - prv.x) * e, y: prv.y + (cur.y - prv.y) * e, w: prv.w + (cur.w - prv.w) * e, h: prv.h + (cur.h - prv.h) * e };
+  else if (cur) { box = cur; if (ix > 0) al = e; }
+  else if (prv) { box = prv; al = 1 - e; }
+  else return;
+  c.save(); c.globalAlpha = al; VL.draw(c, id, box, lt, { a: bi.hl, f: bi.fg, b: bi.fill, s: p.accent }, clamp((lt - .12) / .6, 0, 1)); c.restore();
+}
+function vpnizeBgs(scenes) { // для темы VPN подменяет обычные тёмные фоны на анимированные VPN-фоны
+  if (!VL || state.vpn === 'off' || !scenes || !scenes.length) return;
+  const ids = VL.BG_IDS; let vi = Math.floor(Math.random() * ids.length), last = '';
+  scenes.forEach(s => { if (['dark', 'grid', 'glow', 'rays'].includes(s.bg)) { let id, g = 0; do { id = ids[vi++ % ids.length]; } while (id === last && g++ < 3); s.bg = id; last = id; } });
+}
 function drawScene(c, sc, idx, lt) {
   const W = c.canvas.width, H = c.canvas.height, p = pal(), seed = idx * 13.7 + 1;
   c.save(); c.globalAlpha = 1; c.shadowBlur = 0;
@@ -543,6 +575,7 @@ function drawScene(c, sc, idx, lt) {
     sc.fx.forEach((f, j) => { if (FX[f]) FX[f].draw(c, W, H, lt, sc.dur, bi.fx, seed + j * 3.1); });
     c.restore();
   }
+  if (ix >= 0) drawVpnArt(c, sc, idx, lt, W, H, p, bi, B, ix);
   if (ix >= 0) drawBeats(c, sc, lt, W, H, p, bi, seed, B, ix);
   c.restore(); c.restore();
 }
@@ -564,7 +597,7 @@ function setFormat(fmt) {
 
 /* ---------- Timeline / Scenes ---------- */
 function normScene(s) {
-  return { id: uid(), text: String(s.text || '').slice(0, 160), subtitle: String(s.subtitle || '').slice(0, 100), dur: clamp(+s.dur || 2.5, .8, 20), bg: pickIn(s.bg, ENGINE.bg, 'dark'), anim: pickIn(s.anim, ENGINE.anim, 'pop'), trans: pickIn(s.trans, ENGINE.trans, 'cut'), fx: (Array.isArray(s.fx) ? s.fx : []).map(String).filter((f, i, a) => ENGINE.fx.includes(f) && a.indexOf(f) === i).slice(0, 3), dir: pickIn(s.dir, ENGINE.dir, 'left'), size: clamp(+s.size || 1, .5, 1.5) };
+  return { id: uid(), text: String(s.text || '').slice(0, 160), subtitle: String(s.subtitle || '').slice(0, 100), dur: clamp(+s.dur || 2.5, .8, 20), bg: pickIn(s.bg, ENGINE.bg, 'dark'), anim: pickIn(s.anim, ENGINE.anim, 'pop'), trans: pickIn(s.trans, ENGINE.trans, 'cut'), fx: (Array.isArray(s.fx) ? s.fx : []).map(String).filter((f, i, a) => ENGINE.fx.includes(f) && a.indexOf(f) === i).slice(0, 3), dir: pickIn(s.dir, ENGINE.dir, 'left'), size: clamp(+s.size || 1, .5, 1.5), art: VL ? pickIn(s.art, ['auto', 'none', ...VL.ART_IDS], 'auto') : 'auto' };
 }
 function loadScenario(sc) {
   if (!sc || !Array.isArray(sc.scenes)) throw new Error('В сценарии нет сцен');
@@ -576,6 +609,7 @@ function loadScenario(sc) {
   if (sc.format && SIZES[sc.format]) state.format = sc.format;
   if (sc.style && STYLES[sc.style]) state.style = sc.style;
   if (sc.custom !== undefined) state.custom = cleanCustom(sc.custom);
+  if (['auto', 'on', 'off'].includes(sc.vpn)) state.vpn = sc.vpn;
   layoutCache.clear();
 }
 // Что реально произносит диктор: заголовок + подзаголовок (заглавные слова приводятся к обычному написанию, чтобы TTS не читал их по буквам).
@@ -660,6 +694,13 @@ const TOPICS = [
     points: ['УЧИСЬ *МАЛЕНЬКИМИ*|ПОРЦИЯМИ', 'ПОВТОРЯЙ *ВОВРЕМЯ*|А НЕ ВСЁ СРАЗУ', 'ПРАКТИКА БЬЁТ *ТЕОРИЮ*|', 'ОБЪЯСНИ *ДРУГОМУ*|И ПОЙМЁШЬ САМ', 'ДЕЛАЙ *ПЕРЕРЫВЫ*|МОЗГУ НУЖЕН ОТДЫХ', 'СТАВЬ *ЦЕЛИ*|НА КАЖДУЮ НЕДЕЛЮ'],
     peaks: ['ЗНАНИЕ *РАБОТАЕТ*|ТОЛЬКО В ДЕЛЕ', 'ТЫ *СПОСОБНЕЕ*|ЧЕМ ДУМАЕШЬ'],
     ctas: ['ОТКРОЙ *ПЕРВЫЙ* УРОК|', 'УЧИСЬ *СЕГОДНЯ*|'] },
+  { id: 'vpn', label: 'VPN', title: 'SAFE NET', re: /(vpn|впн|прокси|анонимн|приватн|интернет|трафик|wi-?fi|вайфай|блокиров|шифрован|конфиденц|кибербез)/gi,
+    hooks: ['КТО-ТО *ВИДИТ*|ЧТО ТЫ ДЕЛАЕШЬ В СЕТИ', 'ИНТЕРНЕТ *НЕ ТАК* ПРИВАТЕН|КАК ТЕБЕ КАЖЕТСЯ', 'ТЫ В СЕТИ. А *ТЕБЯ* ЗАЩИТИЛИ?|'],
+    problems: ['ПУБЛИЧНЫЙ *WI-FI*|ОТКРЫТ ДЛЯ ВСЕХ', 'САЙТЫ ВИДЯТ *ТВОЙ IP*|И ПРИМЕРНО ГДЕ ТЫ', 'ЧАСТЬ ДАННЫХ МОЖЕТ *УВИДЕТЬ*|ПРОВАЙДЕР ИЛИ ЧУЖАЯ СЕТЬ'],
+    turns: ['ЗДЕСЬ ПОМОГАЕТ *VPN*|', 'ВОТ ЧТО ДЕЛАЕТ *VPN*|', 'А ТЕПЕРЬ *ТУННЕЛЬ*|'],
+    points: ['VPN *ШИФРУЕТ*|ТВОЙ ТРАФИК', 'ПРЯЧЕТ *ТВОЙ IP*|ЗА АДРЕСОМ СЕРВЕРА', 'ЗАЩИЩАЕТ В *ПУБЛИЧНОМ WI-FI*|', 'ВЫБИРАЙ *СТРАНУ*|ПОДКЛЮЧЕНИЯ', 'ОДНО НАЖАТИЕ — *ТУННЕЛЬ* ГОТОВ|', 'РАБОТАЕТ НА *ВСЕХ*|ТВОИХ УСТРОЙСТВАХ', 'KILL SWITCH *ОБРЫВАЕТ* СВЯЗЬ|ЕСЛИ VPN ОТВАЛИЛСЯ', 'ДОСТУП К *СЕРВИСАМ*|ИЗ ДРУГИХ СТРАН', 'ЧИТАЙ *ПОЛИТИКУ*|КОНФИДЕНЦИАЛЬНОСТИ'],
+    peaks: ['ПРИВАТНОСТЬ — ЭТО *ВЫБОР*|', 'ТВОЯ СЕТЬ — *ТВОИ* ПРАВИЛА|'],
+    ctas: ['ВКЛЮЧИ *ЗАЩИТУ*|СЕГОДНЯ', 'ПОДКЛЮЧИСЬ *БЕЗОПАСНО*|'] },
   { id: 'gaming', label: 'ИГРЫ', title: 'GAME ON', re: /(игр[аыуе]\b|игров|геймер|гейм|киберспорт|консол|стрим|майнкрафт|minecraft|fortnite|dota|кс\b|cs2)/gi,
     hooks: ['ЭТО *ИЗМЕНИТ*|ТВОЮ ИГРУ', 'ТЫ ИГРАЕШЬ *НЕ ТАК*|', 'ГОТОВ К *НОВОМУ* УРОВНЮ?|'],
     problems: ['ЗАСТРЯЛ НА ОДНОМ *РАНГЕ*|', 'ПОРАЖЕНИЯ — *НЕ КОНЕЦ*|'],
@@ -848,7 +889,7 @@ const DB = {
   async run(mode, fn) { const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction('projects', mode), rq = fn(t.objectStore('projects')); t.oncomplete = () => res(rq && rq.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); },
   put(o) { return this.run('readwrite', s => s.put(o)); }, all() { return this.run('readonly', s => s.getAll()); }, get(id) { return this.run('readonly', s => s.get(id)); }, del(id) { return this.run('readwrite', s => s.delete(id)); }
 };
-const snapshot = () => ({ title: state.title, format: state.format, style: state.style, subs: state.subs, pace: state.pace, custom: state.custom, scenes: state.scenes.map(({ id, ...r }) => r) });
+const snapshot = () => ({ title: state.title, format: state.format, style: state.style, subs: state.subs, pace: state.pace, vpn: state.vpn, custom: state.custom, scenes: state.scenes.map(({ id, ...r }) => r) });
 let autoT, curId = null;
 function autosave() { clearTimeout(autoT); autoT = setTimeout(() => DB.put({ id: '__autosave__', name: 'autosave', updated: Date.now(), data: snapshot() }).catch(() => { }), 700); }
 async function refreshProjects() {
@@ -858,7 +899,7 @@ async function refreshProjects() {
     box.innerHTML = list.length ? list.map(p => `<div class="proj" data-id="${p.id}"><span>${esc(p.name)}</span><button class="btn" data-a="open">Открыть</button><button class="btn" data-a="dup">⧉</button><button class="btn" data-a="del">✕</button></div>`).join('') : '<div class="hint">Сохранённых проектов нет.</div>';
   } catch (e) { box.innerHTML = '<div class="hint bad">Хранилище недоступно: ' + esc(e.message) + '</div>'; }
 }
-function applyData(d) { state.custom = {}; loadScenario(d); if (d.subs !== undefined) state.subs = !!d.subs; syncUI(); syncLook(); setFormat(state.format); P.t = 0; renderNow(); renderScenes(); loadFont().then(() => { layoutCache.clear(); renderNow(); }); }
+function applyData(d) { state.custom = {}; state.vpn = 'auto'; loadScenario(d); if (d.subs !== undefined) state.subs = !!d.subs; syncUI(); syncLook(); setFormat(state.format); P.t = 0; renderNow(); renderScenes(); loadFont().then(() => { layoutCache.clear(); renderNow(); }); }
 
 /* ---------- UI ---------- */
 function chips(id, items, cur, on) { const box = $(id); box.innerHTML = items.map(([v, l]) => `<button class="chip${v === cur ? ' on' : ''}" data-v="${v}">${esc(l)}</button>`).join(''); box.onclick = e => { const b = e.target.closest('.chip'); if (!b) return; box.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === b)); on(b.dataset.v); }; }
@@ -870,18 +911,19 @@ function syncUI() {
 async function loadFont() { const p = pal(); try { await Promise.all([document.fonts.load(`${p.weight} 40px ${p.font}`), document.fonts.load(`700 40px ${F.jb}`)]); } catch { } }
 const opt = (list, cur, lab) => list.map(v => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(lab ? lab(v) : v)}</option>`).join('');
 const foldSet = new Set();
+const artOpts = cur => VL ? `<option value="auto"${cur === 'auto' ? ' selected' : ''}>Авто (по тексту сцены)</option><option value="none"${cur === 'none' ? ' selected' : ''}>Без рисунка</option>` + VL.ART_IDS.map(id => `<option value="${id}"${id === cur ? ' selected' : ''}>${esc(VL.ART[id].name)}</option>`).join('') : '';
 function renderScenes() {
   const box = $('#sceneList'); let a = 0;
   box.innerHTML = state.scenes.map((s, i) => { const st = a; a += s.dur; const fd = foldSet.has(s.id); return `<div class="scene${fd ? ' fold' : ''}" data-i="${i}"><div class="sh"><button data-a="fold" title="Свернуть / развернуть">${fd ? '▸' : '▾'}</button><b>#${i + 1}</b><span class="t" data-a="seek">${st.toFixed(1)}–${a.toFixed(1)} с · ${esc(String(s.text).replace(/\*/g, '').slice(0, 30))}</span><button data-a="up">↑</button><button data-a="down">↓</button><button data-a="dup">⧉</button><button data-a="del">✕</button></div><div class="sb">
     <input type="text" data-k="text" value="${esc(s.text)}" placeholder="Фраза (*слово* — акцентным цветом)"><input type="text" data-k="subtitle" value="${esc(s.subtitle)}" placeholder="Продолжение той же мысли">
     <div class="row"><label class="l">Длит., с<input type="number" data-k="dur" value="${s.dur}" min="0.8" max="20" step="0.1"></label><label class="l">Анимация<select data-k="anim">${opt(ENGINE.anim, s.anim, v => ANIMS[v].name)}</select></label></div>
-    <div class="row"><label class="l">Переход<select data-k="trans">${opt(ENGINE.trans, s.trans, v => TRANS[v].name)}</select></label><label class="l">Фон<select data-k="bg">${opt(ENGINE.bg, s.bg, v => LABEL[v])}</select></label><label class="l">Элемент<select data-k="fx"><option value="">—</option>${opt(ENGINE.fx, s.fx[0], v => FX[v].name)}</select></label></div></div></div>`; }).join('') || '<div class="hint">Сцен пока нет — создай видео из запроса или добавь сцену вручную.</div>';
+    <div class="row"><label class="l">Переход<select data-k="trans">${opt(ENGINE.trans, s.trans, v => TRANS[v].name)}</select></label><label class="l">Фон<select data-k="bg">${opt(ENGINE.bg, s.bg, v => LABEL[v])}</select></label><label class="l">Элемент<select data-k="fx"><option value="">—</option>${opt(ENGINE.fx, s.fx[0], v => FX[v].name)}</select></label></div>${VL ? `<div class="row"><label class="l">VPN-графика<select data-k="art">${artOpts(s.art || 'auto')}</select></label></div>` : ''}</div></div>`; }).join('') || '<div class="hint">Сцен пока нет — создай видео из запроса или добавь сцену вручную.</div>';
   $('#totalHint').textContent = `Сцен: ${state.scenes.length} · общая длительность ${total().toFixed(1)} с`;
 }
 $('#sceneList').addEventListener('input', e => {
   const el = e.target, card = el.closest('.scene'); if (!card || !el.dataset.k) return; const s = state.scenes[+card.dataset.i], k = el.dataset.k;
   if (k === 'dur') { const v = clamp(+el.value, .8, 20); if (!isFinite(v)) return; s.dur = v; } else if (k === 'fx') s.fx = el.value ? [el.value] : []; else s[k] = el.value;
-  layoutCache.clear(); P.t = clamp(startOf(+card.dataset.i) + .01, 0, total()); if (k === 'anim' || k === 'trans') P.t = startOf(+card.dataset.i) + (k === 'trans' ? .12 : .3);
+  layoutCache.clear(); P.t = clamp(startOf(+card.dataset.i) + .01, 0, total()); if (k === 'anim' || k === 'trans' || k === 'art') P.t = startOf(+card.dataset.i) + (k === 'trans' ? .12 : k === 'art' ? .9 : .3);
   pause(); renderNow(); $('#totalHint').textContent = `Сцен: ${state.scenes.length} · общая длительность ${total().toFixed(1)} с`; autosave();
 });
 $('#sceneList').addEventListener('click', e => {
@@ -906,7 +948,7 @@ $('#subsOn').onchange = e => { state.subs = e.target.checked; renderNow(); autos
 $('#btnCreate').onclick = async () => {
   const brief = $('#brief').value.trim(); if (!brief) return toast('Опиши, какое видео нужно', true);
   const b = $('#btnCreate'); b.disabled = true; b.textContent = 'Создаю сценарий…'; pause();
-  try { await loadFont(); const sc = await direct(brief); loadScenario(sc); P.t = 0; renderScenes(); renderNow(); autosave(); $('#projName').value = state.title; toast(`Готово: ${state.scenes.length} сцен, ${total().toFixed(1)} с` + ($('#srcTag').textContent.includes('Gemini') ? '' : ' · без ИИ: сценарий по шаблонам. Для настоящего ИИ подключи Worker в настройках внизу')); play(); }
+  try { await loadFont(); const sc = await direct(brief); if (VL && (state.vpn === 'on' || VL.isTopic(brief))) vpnizeBgs(sc.scenes); loadScenario(sc); P.t = 0; renderScenes(); renderNow(); autosave(); $('#projName').value = state.title; toast(`Готово: ${state.scenes.length} сцен, ${total().toFixed(1)} с` + ($('#srcTag').textContent.includes('Gemini') ? '' : ' · без ИИ: сценарий по шаблонам. Для настоящего ИИ подключи Worker в настройках внизу')); play(); }
   catch (e) { console.error(e); toast('Не удалось создать: ' + e.message, true); }
   finally { b.disabled = false; b.textContent = 'Создать видео'; }
 };
@@ -972,9 +1014,10 @@ function syncLook() {
   const c = state.custom || {}, p = pal(); buildFontSel();
   $('#fontSel').value = c.font && [...$('#fontSel').options].some(o => o.value === c.font) ? c.font : '';
   $('#caseSel').value = c.upper === true ? '1' : c.upper === false ? '0' : '';
-  $('#paceSel').value = state.pace; $('#colAccent').value = p.accent; $('#colBg').value = p.bg; $('#colFg').value = p.fg;
+  $('#vpnSel').value = state.vpn; $('#paceSel').value = state.pace; $('#colAccent').value = p.accent; $('#colBg').value = p.bg; $('#colFg').value = p.fg;
 }
 function lookChanged() { layoutCache.clear(); renderNow(); autosave(); }
+$('#vpnSel').onchange = e => { state.vpn = e.target.value; renderNow(); autosave(); if (e.target.value !== 'off' && !VL) toast('Файл vpn-library.js не найден рядом с index.html', true); };
 $('#paceSel').onchange = e => {
   state.pace = e.target.value; layoutCache.clear();
   if (AudioEng.tracks.voice) toast('Длительность сцен задаёт озвучка. Озвучь заново, чтобы применить новый темп.');
@@ -1061,11 +1104,12 @@ $('#btnWorkerTest').onclick = async () => { const u = Worker.url() || $('#worker
 /* ---------- Init ---------- */
 
 /* ---------- Библиотека: фоны, шрифты, анимации, переходы, элементы, стили ---------- */
-const LIB_CATS = [['all', 'Все'], ['bg', 'Фоны'], ['font', 'Шрифты'], ['anim', 'Анимации'], ['trans', 'Переходы'], ['fx', 'Элементы'], ['style', 'Стили']];
-const LIB_CAT_NAME = { bg: 'Фон', font: 'Шрифт', anim: 'Анимация', trans: 'Переход', fx: 'Элемент', style: 'Стиль' };
+const LIB_CATS = [['all', 'Все'], ['bg', 'Фоны'], ['vpn', 'VPN-графика'], ['font', 'Шрифты'], ['anim', 'Анимации'], ['trans', 'Переходы'], ['fx', 'Элементы'], ['style', 'Стили']];
+const LIB_CAT_NAME = { bg: 'Фон', font: 'Шрифт', anim: 'Анимация', trans: 'Переход', fx: 'Элемент', style: 'Стиль', vpn: 'VPN-графика' };
 const FONT_TAG = { ab: 'poster', mont: 'sans', osw: 'poster', rubik: 'sans', unb: 'poster', russo: 'poster', bebas: 'poster', pf: 'serif', sg: 'sans', jb: 'mono', inter: 'sans', user: 'user' };
 const LIB_SUBS = {
   bg: [['all', 'Все'], ['static', 'Статичные'], ['live', 'Анимированные']],
+  vpn: [['all', 'Все'], ['device', 'Модели устройств'], ['scheme', 'Схемы и визуал'], ['icon', 'Иконки']],
   font: [['all', 'Все'], ['poster', 'Плакатные'], ['sans', 'Гротески'], ['serif', 'С засечками'], ['mono', 'Моноширинные']],
   anim: [['all', 'Все'], ['char', 'По буквам'], ['word', 'По словам'], ['line', 'По строкам'], ['whole', 'Целиком']]
 };
@@ -1074,12 +1118,13 @@ const libDraw = new Map(); let libPlay = null, libIO = null;
 const libA = document.createElement('canvas'), libTmp = document.createElement('canvas');
 function libItems() {
   const it = [];
-  ENGINE.bg.forEach(id => it.push({ cat: 'bg', id, name: LABEL[id] || id, tag: ['grid', 'rays', 'glow'].includes(id) ? 'live' : 'static' }));
+  ENGINE.bg.forEach(id => it.push({ cat: 'bg', id, name: LABEL[id] || id, tag: (['grid', 'rays', 'glow'].includes(id) || id.startsWith('vpn_')) ? 'live' : 'static' }));
   FONTS.forEach(f => it.push({ cat: 'font', id: f[0], name: f[1], tag: FONT_TAG[f[0]] || 'sans', fam: f[2], w: f[3] }));
   if (userFontName) it.push({ cat: 'font', id: 'user', name: 'Свой: ' + userFontLabel, tag: 'user', fam: `'${userFontName}',Impact,sans-serif`, w: 400 });
   ENGINE.anim.forEach(id => it.push({ cat: 'anim', id, name: ANIMS[id].name, tag: ANIMS[id].unit === 'all' ? 'whole' : ANIMS[id].unit }));
   ENGINE.trans.forEach(id => it.push({ cat: 'trans', id, name: TRANS[id].name, tag: 'trans' }));
   ENGINE.fx.forEach(id => it.push({ cat: 'fx', id, name: FX[id].name, tag: 'fx' }));
+  if (VL) VL.ART_IDS.forEach(id => it.push({ cat: 'vpn', id, name: VL.ART[id].name, tag: VL.ART[id].group }));
   Object.values(STYLES).forEach(st => it.push({ cat: 'style', id: st.id, name: st.name, tag: 'style' }));
   return it;
 }
@@ -1090,9 +1135,10 @@ function libMakeDrawer(x) {
   if (x.cat === 'anim') { const sc = { text: 'ТЕКСТ', subtitle: '', dur: 2.4, bg: 'dark', anim: x.id, trans: 'cut', fx: [], dir: 'left', size: 1, demo: true }; return (cv, t) => { const c = cv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); drawScene(c, sc, 0, t === null ? 2.2 : t * 2.2); }; }
   if (x.cat === 'trans') return (cv, t) => { const c = cv.getContext('2d'), W = cv.width, H = cv.height, p = pal(); libA.width = W; libA.height = H; demoCard(libA.getContext('2d'), p.accent, 'СЦЕНА 1', contrast(p.accent)); demoCard(c, p.bg, 'СЦЕНА 2', p.fg); c.save(); TRANS[x.id].draw(c, libA, t === null ? .5 : t, W, H, p, libTmp); c.restore(); };
   if (x.cat === 'fx') return (cv, t) => { const c = cv.getContext('2d'), W = cv.width, H = cv.height, p = pal(); c.fillStyle = p.bg; c.fillRect(0, 0, W, H); c.save(); FX[x.id].draw(c, W, H, t === null ? .9 : t * 2.5, 2.5, p.accent, 3.3); c.restore(); };
+  if (x.cat === 'vpn' && VL) return (cv, t) => { const c = cv.getContext('2d'), W = cv.width, H = cv.height, p = pal(); c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.fillStyle = p.bg; c.fillRect(0, 0, W, H); VL.draw(c, x.id, { x: W * .04, y: H * .06, w: W * .92, h: H * .88 }, t === null ? 1.8 : t * LIB_DUR.vpn, { a: p.accent, f: p.fg, b: p.bg, s: p.accent }, 1); };
   return null;
 }
-const LIB_DUR = { bg: 3, anim: 2.2, trans: 1.2, fx: 2.5 };
+const LIB_DUR = { bg: 3, anim: 2.2, trans: 1.2, fx: 2.5, vpn: 6 };
 function libStop() { if (libPlay) { cancelAnimationFrame(libPlay.raf); const { cv, fn } = libPlay; libPlay = null; fn(cv, null); } }
 function libPlayCard(cv, cat) {
   const fn = libDraw.get(cv); if (!fn) return; libStop();
@@ -1124,7 +1170,7 @@ function libMarkUsed() {
   document.querySelectorAll('#libGrid .li').forEach(card => {
     const c = card.dataset.cat, id = card.dataset.id; let on = false;
     if (c === 'font') on = (state.custom.font || '') === id; else if (c === 'style') on = state.style === id;
-    else if (sc) on = c === 'bg' ? sc.bg === id : c === 'anim' ? sc.anim === id : c === 'trans' ? sc.trans === id : sc.fx.includes(id);
+    else if (sc) on = c === 'bg' ? sc.bg === id : c === 'anim' ? sc.anim === id : c === 'trans' ? sc.trans === id : c === 'vpn' ? sc.art === id : sc.fx.includes(id);
     card.classList.toggle('used', on); card.querySelector('[data-a=apply]').textContent = on ? '✓ Выбрано' : 'Применить';
   });
 }
@@ -1136,8 +1182,8 @@ async function libApply(cat, id) {
   if (cat === 'font') { state.custom.font = id; await loadFont(); syncLook(); lookChanged(); toast('Шрифт применён ко всему видео'); return libMarkUsed(); }
   if (cat === 'style') { state.style = id; await loadFont(); syncUI(); syncLook(); layoutCache.clear(); renderNow(); autosave(); toast('Стиль применён ко всему видео'); return libMarkUsed(); }
   const i = libTargetScene(), s = state.scenes[i]; if (!s) return toast('Сначала создай сцены', true);
-  if (cat === 'bg') s.bg = id; else if (cat === 'anim') s.anim = id; else if (cat === 'trans') s.trans = id; else if (cat === 'fx') s.fx = [id];
-  layoutCache.clear(); pause(); renderScenes(); P.t = startOf(i) + (cat === 'trans' ? .12 : .3); renderNow(); autosave();
+  if (cat === 'bg') s.bg = id; else if (cat === 'anim') s.anim = id; else if (cat === 'trans') s.trans = id; else if (cat === 'fx') s.fx = [id]; else if (cat === 'vpn') s.art = id;
+  layoutCache.clear(); pause(); renderScenes(); P.t = startOf(i) + (cat === 'trans' ? .12 : cat === 'vpn' ? .9 : .3); renderNow(); autosave();
   toast(cat === 'trans' && i === 0 ? 'Применено, но у первой сцены переход не показывается' : `Применено к сцене #${i + 1}`); libMarkUsed();
 }
 function setView(v) {
@@ -1156,6 +1202,7 @@ $('#libGrid').onclick = e => {
 
 (async function init() {
   $('#voiceSel').innerHTML = ['Fenrir', 'Kore', 'Puck', 'Charon', 'Zephyr', 'Aoede', 'Leda', 'Orus'].map(v => `<option>${v}</option>`).join('');
+  if (!VL) setTimeout(() => toast('Библиотека VPN (vpn-library.js) не загрузилась. Положи файл рядом с index.html', true), 600);
   initCompat(); $('#srcTag').textContent = Worker.url() ? 'Director: Gemini (Worker)' : 'Director: локальный';
   try { const a = await DB.get('__autosave__'); if (a && a.data && a.data.scenes && a.data.scenes.length) { loadScenario(a.data); if (a.data.subs !== undefined) state.subs = !!a.data.subs; } } catch { }
   try { const fr = await DB.get('__font__'); if (fr && fr.buf) await installUserFont(fr.buf, fr.name || 'шрифт'); } catch { }
