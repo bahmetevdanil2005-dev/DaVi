@@ -514,5 +514,22 @@ function fitBox(L, W, H, ar) {
   return best;
 }
 
-root.VPNLib = { version: '1.0', BG_IDS, BG_NAMES, BG: BGS, drawBg, ART, ART_IDS, draw, drawIcon, ICON_IDS: Object.keys(ICON), isTopic, plan, fitBox };
+/* Фиксированный слот сцены: рисунок занимает одно место на всю сцену, остальное кадра отдаётся тексту.
+   Вертикальный/квадратный кадр: рисунок сверху или снизу. Горизонтальный: слева или справа. v (0/1) выбирает сторону.
+   Возвращает { art:{x,y,w,h}, text:{x,y,w,h} } в пикселях. Рамки не пересекаются, между ними запас. */
+function slot(W, H, ar, v) {
+  const m = Math.min(W, H), gap = m * .05, side = (v | 0) % 2;
+  if (W > H * 1.15) {
+    let w = Math.min(W * .44, H * .88 * ar), h = w / ar; if (h > H * .88) { h = H * .88; w = h * ar; }
+    const x = side ? W * .96 - w : W * .04, art = { x, y: (H - h) / 2, w, h };
+    const text = side ? { x: 0, y: 0, w: x - gap, h: H } : { x: x + w + gap, y: 0, w: W - (x + w + gap), h: H };
+    return { art, text };
+  }
+  let h = Math.min(H * .42, W * .9 / ar), w = h * ar; if (w > W * .9) { w = W * .9; h = w / ar; }
+  const y = side ? H * .94 - h : H * .06, art = { x: (W - w) / 2, y, w, h };
+  const text = side ? { x: 0, y: 0, w: W, h: y - gap } : { x: 0, y: y + h + gap, w: W, h: H - (y + h + gap) };
+  return { art, text };
+}
+
+root.VPNLib = { version: '1.0', BG_IDS, BG_NAMES, BG: BGS, drawBg, ART, ART_IDS, draw, drawIcon, ICON_IDS: Object.keys(ICON), isTopic, plan, fitBox, slot };
 })(typeof window !== 'undefined' ? window : globalThis);
