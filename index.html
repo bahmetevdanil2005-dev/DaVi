@@ -48,14 +48,32 @@ input[type=range]{width:100%;accent-color:var(--acc);height:32px}
 #toast{position:fixed;left:12px;right:12px;bottom:max(14px,env(safe-area-inset-bottom));max-width:560px;margin:0 auto;background:#222;border:1px solid var(--acc);color:var(--txt);border-radius:14px;padding:12px 14px;z-index:9;opacity:0;transform:translateY(12px);pointer-events:none;transition:.25s}
 #toast.show{opacity:1;transform:none}#toast.err{border-color:var(--err)}
 details summary{cursor:pointer;color:var(--dim);font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;min-height:28px}
+.hidden{display:none!important}
+.hrow{display:flex;align-items:center;justify-content:space-between;gap:8px}.hrow .btn{min-height:36px;padding:6px 12px;font-size:13px}
+.sh .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scene.fold .sb{display:none}.scene.fold{padding:6px 10px}
+.tabs{display:flex;gap:8px;position:sticky;top:0;z-index:5;background:var(--bg);padding:6px 0}
+.tab{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:12px;padding:12px;font:inherit;font-weight:700;cursor:pointer;min-height:46px}
+.tab.on{background:var(--acc);color:#0a0a0a;border-color:var(--acc)}
+.lib-sec{display:none}body.lib .lib-sec{display:flex}body.lib .ed{display:none}
+.lgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.li{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:8px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.li.used{border-color:var(--acc)}
+.li .lp{width:100%;aspect-ratio:16/9;border-radius:8px;background:#000;overflow:hidden;display:flex;align-items:center;justify-content:center;text-align:center;position:relative}
+.li canvas{width:100%;height:100%;display:block;cursor:pointer}
+.li .lp.fnt{background:#0e0e0e;font-size:20px;line-height:1.15;padding:6px}
+.li .lp.sty{font-size:20px;gap:.3em}
+.li .ln{display:flex;flex-direction:column;gap:1px;min-width:0}.li .ln b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.li .ln span{font-size:11px;color:var(--dim)}
+.li .btn{min-height:36px;padding:6px;font-size:13px}.li.used .btn{background:var(--acc);color:#0a0a0a;border-color:var(--acc)}
 @media(min-width:1000px){.wrap{max-width:1040px;display:grid;grid-template-columns:1fr 1fr;align-items:start}header,.full{grid-column:1/3}}
 </style>
 </head>
 <body>
 <div class="wrap">
 <header><div class="logo">VIDEO<b>CREATE</b></div><div class="tag" id="srcTag">Director: локальный</div></header>
+<nav class="tabs full" id="tabs"><button class="tab on" data-v="edit">Редактор</button><button class="tab" data-v="lib">Библиотека</button></nav>
 
-<section class="card">
+<section class="card ed">
   <h2>1 · Запрос</h2>
   <textarea id="brief" placeholder="Например: динамичное видео о том, что человек даже не представляет, какие возможности открывает искусственный интеллект"></textarea>
   <div class="chips" id="fmtChips"></div>
@@ -65,14 +83,14 @@ details summary{cursor:pointer;color:var(--dim);font-size:12px;letter-spacing:.1
   <div class="row"><input type="text" id="aiEdit" placeholder="Правка через ИИ: «сделай финал агрессивнее»" style="flex:3 1 200px"><button class="btn" id="btnAiEdit" style="flex:1 1 90px">Править</button></div>
 </section>
 
-<section class="card">
+<section class="card ed">
   <h2>2 · Предпросмотр</h2>
   <div class="stage"><canvas id="cv" width="720" height="1280"></canvas></div>
   <div class="bar"><button class="btn" id="btnPlay" style="min-width:56px">▶</button><input type="range" id="scrub" min="0" max="1000" value="0"><span class="time" id="timeLbl">0.0 / 0.0</span></div>
   <label class="l" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="subsOn" checked style="width:22px;height:22px;accent-color:#b6ff00">Показывать вторую часть фразы (подзаголовок)</label>
 </section>
 
-<section class="card">
+<section class="card ed">
   <h2>2б · Оформление</h2>
   <label class="l">Темп текста<select id="paceSel"><option value="slow">Медленно</option><option value="norm">Нормально</option><option value="fast">Быстро</option></select></label>
   <div class="row">
@@ -91,14 +109,17 @@ details summary{cursor:pointer;color:var(--dim);font-size:12px;letter-spacing:.1
   <button class="btn" id="btnResetLook">Сбросить оформление до стиля</button>
 </section>
 
-<section class="card full">
-  <h2>3 · Сцены (Edit Mode)</h2>
-  <div id="sceneList" style="display:flex;flex-direction:column;gap:8px"></div>
-  <div class="row"><button class="btn" id="btnAddScene">+ Сцена</button><button class="btn" id="btnFit">Распределить время</button></div>
+<section class="card full ed">
+  <div class="hrow"><h2>3 · Сцены (Edit Mode)</h2><button class="btn" id="btnSceneToggle">Скрыть редактор</button></div>
+  <div id="sceneBody" style="display:flex;flex-direction:column;gap:10px">
+    <div class="row"><button class="btn" id="btnFoldAll">Свернуть все</button><button class="btn" id="btnUnfoldAll">Развернуть все</button></div>
+    <div id="sceneList" style="display:flex;flex-direction:column;gap:8px"></div>
+    <div class="row"><button class="btn" id="btnAddScene">+ Сцена</button><button class="btn" id="btnFit">Распределить время</button></div>
+  </div>
   <div class="hint" id="totalHint"></div>
 </section>
 
-<section class="card">
+<section class="card ed">
   <h2>4 · Звук</h2>
   <div class="row"><label class="l">Музыка (файл)<input type="file" id="musicFile" accept="audio/*"></label></div>
   <div class="row">
@@ -112,7 +133,7 @@ details summary{cursor:pointer;color:var(--dim);font-size:12px;letter-spacing:.1
   <div class="hint" id="audioHint">Звук не подключён. TTS требует адрес Worker в настройках.</div>
 </section>
 
-<section class="card">
+<section class="card ed">
   <h2>5 · Экспорт</h2>
   <div class="row">
     <label class="l">Формат файла<select id="expFmt"></select></label>
@@ -126,14 +147,14 @@ details summary{cursor:pointer;color:var(--dim);font-size:12px;letter-spacing:.1
   <div class="hint" id="compat"></div>
 </section>
 
-<section class="card">
+<section class="card ed">
   <h2>6 · Проекты</h2>
   <div class="row"><input type="text" id="projName" placeholder="Название проекта"><button class="btn" id="btnSave">Сохранить</button></div>
   <div id="projList" style="display:flex;flex-direction:column;gap:6px"></div>
   <div class="row"><button class="btn" id="btnJsonOut">Экспорт JSON</button><label class="btn" style="text-align:center;cursor:pointer">Импорт JSON<input type="file" id="jsonIn" accept="application/json,.json" style="display:none"></label></div>
 </section>
 
-<section class="card">
+<section class="card ed">
   <details>
     <summary>Настройки ИИ (Worker)</summary>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
@@ -142,6 +163,15 @@ details summary{cursor:pointer;color:var(--dim);font-size:12px;letter-spacing:.1
       <div class="hint">Ключ Gemini хранится только в секретах Worker (GEMINI_API_KEY), в код сайта он не попадает. Без Worker работает локальный Director на шаблонах.</div>
     </div>
   </details>
+</section>
+<section class="card full lib-sec" id="libSec">
+  <h2>Библиотека</h2>
+  <div class="chips" id="libCat"></div>
+  <div class="chips" id="libSub"></div>
+  <div class="row"><input type="text" id="libQ" placeholder="Поиск по названию…"><label class="l">Применять к сцене<select id="libScene"></select></label></div>
+  <div class="hint" id="libCount"></div>
+  <div id="libGrid" class="lgrid"></div>
+  <div class="hint">Нажми на превью анимации, перехода, фона или элемента — оно проиграется. «Применить» ставит выбранное в сцену (шрифты и стили применяются ко всему видео).</div>
 </section>
 </div>
 <div id="toast"></div>
@@ -402,7 +432,7 @@ function buildBeat(c, toks, pos, W, H, mul, o) {
 function planBeats(c, sc, W, H, p) {
   const userFont = !!(state.custom && state.custom.font);
   const si = state.scenes.indexOf(sc), start = (si > 0 && sc.trans !== 'cut' && TRANS[sc.trans]) ? Math.min(.4, sc.dur * .5) + .03 : .05; // текст новой сцены начинается после перехода, чтобы не накладываться на прошлую сцену
-  const key = ['B', sc.text, sc.subtitle, state.subs, sc.dur, sc.anim, sc.size, W, H, p.font, p.weight, p.upper, userFont, p.anims.join(), start].join('|');
+  const key = ['B', sc.text, sc.subtitle, state.subs, sc.dur, sc.anim, sc.size, W, H, p.font, p.weight, p.upper, userFont, p.anims.join(), start, !!sc.demo].join('|');
   let B = layoutCache.get(key); if (B) return B;
   const toks = phraseTokens(sc, state.subs); B = []; if (!toks.length) { layoutCache.set(key, B); return B; }
   const rng = mkRng(hashStr(sc.text + '|' + sc.subtitle) + 7), chunks = chunkTokens(toks, rng);
@@ -416,10 +446,10 @@ function planBeats(c, sc, W, H, p) {
     if (i === 0) list = ['center', 'top']; list = list.filter(x => x !== prevPos);
     const pos = list[Math.floor(rng() * list.length)] || 'center'; prevPos = pos;
     const cand = pool.filter(a => a !== prevAnim && a !== prev2), anim = i === 0 ? sc.anim : (cand[Math.floor(rng() * cand.length)] || sc.anim); prev2 = prevAnim; prevAnim = anim;
-    const r1 = rng(), font = (!userFont && one && ch[0].s.length >= 4 && r1 < .15) ? { family: F.jb, weight: 700, italic: false, upper: true } : baseFont;
+    const r1 = rng(), font = (!userFont && !sc.demo && one && ch[0].s.length >= 4 && r1 < .15) ? { family: F.jb, weight: 700, italic: false, upper: true } : baseFont;
     const fx = 1, fy = 1; // буквы всегда в родных пропорциях шрифта
-    const deco = (anim === 'outlinefill' || rng() >= .2) ? 'none' : 'outline';
-    const hlAll = !explicit && rng() < .28, just = ch.length > 1 && rng() < .55, exit = EXITS[Math.floor(rng() * EXITS.length)];
+    const deco = (anim === 'outlinefill' || sc.demo || rng() >= .2) ? 'none' : 'outline';
+    const hlAll = !explicit && !sc.demo && rng() < .28, just = ch.length > 1 && rng() < .55, exit = EXITS[Math.floor(rng() * EXITS.length)];
     const bb = buildBeat(c, ch, pos, W, H, sc.size || 1, { hlAll, just, fx, fy, font });
     const t0 = start + acc / sum * (end - start); acc += wts[i];
     B.push({ t0, t1: i === chunks.length - 1 ? sc.dur : start + acc / sum * (end - start), anim, dir: POS_DIR[pos] || ['left', 'right', 'up', 'down'][Math.floor(rng() * 4)], L: bb.L, font, fx, fy: bb.fy, deco, exit });
@@ -839,12 +869,13 @@ function syncUI() {
 }
 async function loadFont() { const p = pal(); try { await Promise.all([document.fonts.load(`${p.weight} 40px ${p.font}`), document.fonts.load(`700 40px ${F.jb}`)]); } catch { } }
 const opt = (list, cur, lab) => list.map(v => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(lab ? lab(v) : v)}</option>`).join('');
+const foldSet = new Set();
 function renderScenes() {
   const box = $('#sceneList'); let a = 0;
-  box.innerHTML = state.scenes.map((s, i) => { const st = a; a += s.dur; return `<div class="scene" data-i="${i}"><div class="sh"><b>#${i + 1}</b><span class="t" data-a="seek">${st.toFixed(1)}–${a.toFixed(1)} с</span><button data-a="up">↑</button><button data-a="down">↓</button><button data-a="dup">⧉</button><button data-a="del">✕</button></div>
+  box.innerHTML = state.scenes.map((s, i) => { const st = a; a += s.dur; const fd = foldSet.has(s.id); return `<div class="scene${fd ? ' fold' : ''}" data-i="${i}"><div class="sh"><button data-a="fold" title="Свернуть / развернуть">${fd ? '▸' : '▾'}</button><b>#${i + 1}</b><span class="t" data-a="seek">${st.toFixed(1)}–${a.toFixed(1)} с · ${esc(String(s.text).replace(/\*/g, '').slice(0, 30))}</span><button data-a="up">↑</button><button data-a="down">↓</button><button data-a="dup">⧉</button><button data-a="del">✕</button></div><div class="sb">
     <input type="text" data-k="text" value="${esc(s.text)}" placeholder="Фраза (*слово* — акцентным цветом)"><input type="text" data-k="subtitle" value="${esc(s.subtitle)}" placeholder="Продолжение той же мысли">
     <div class="row"><label class="l">Длит., с<input type="number" data-k="dur" value="${s.dur}" min="0.8" max="20" step="0.1"></label><label class="l">Анимация<select data-k="anim">${opt(ENGINE.anim, s.anim, v => ANIMS[v].name)}</select></label></div>
-    <div class="row"><label class="l">Переход<select data-k="trans">${opt(ENGINE.trans, s.trans, v => TRANS[v].name)}</select></label><label class="l">Фон<select data-k="bg">${opt(ENGINE.bg, s.bg, v => LABEL[v])}</select></label><label class="l">Элемент<select data-k="fx"><option value="">—</option>${opt(ENGINE.fx, s.fx[0], v => FX[v].name)}</select></label></div></div>`; }).join('') || '<div class="hint">Сцен пока нет — создай видео из запроса или добавь сцену вручную.</div>';
+    <div class="row"><label class="l">Переход<select data-k="trans">${opt(ENGINE.trans, s.trans, v => TRANS[v].name)}</select></label><label class="l">Фон<select data-k="bg">${opt(ENGINE.bg, s.bg, v => LABEL[v])}</select></label><label class="l">Элемент<select data-k="fx"><option value="">—</option>${opt(ENGINE.fx, s.fx[0], v => FX[v].name)}</select></label></div></div></div>`; }).join('') || '<div class="hint">Сцен пока нет — создай видео из запроса или добавь сцену вручную.</div>';
   $('#totalHint').textContent = `Сцен: ${state.scenes.length} · общая длительность ${total().toFixed(1)} с`;
 }
 $('#sceneList').addEventListener('input', e => {
@@ -856,6 +887,7 @@ $('#sceneList').addEventListener('input', e => {
 $('#sceneList').addEventListener('click', e => {
   const b = e.target.closest('[data-a]'), card = e.target.closest('.scene'); if (!b || !card) return; const i = +card.dataset.i, a = b.dataset.a, S = state.scenes;
   if (a === 'seek') { pause(); P.t = startOf(i) + .01; renderNow(); document.querySelectorAll('.scene').forEach(x => x.classList.toggle('sel', x === card)); return; }
+  if (a === 'fold') { const f = card.classList.toggle('fold'); if (f) foldSet.add(S[i].id); else foldSet.delete(S[i].id); b.textContent = f ? '▸' : '▾'; return; }
   if (a === 'up' && i > 0) [S[i - 1], S[i]] = [S[i], S[i - 1]];
   else if (a === 'down' && i < S.length - 1) [S[i + 1], S[i]] = [S[i], S[i + 1]];
   else if (a === 'dup') S.splice(i + 1, 0, { ...S[i], id: uid(), fx: [...S[i].fx] });
@@ -863,6 +895,9 @@ $('#sceneList').addEventListener('click', e => {
   else return;
   P.t = clamp(P.t, 0, total()); renderScenes(); renderNow(); autosave();
 });
+$('#btnSceneToggle').onclick = () => { const h = $('#sceneBody').classList.toggle('hidden'); $('#btnSceneToggle').textContent = h ? 'Показать редактор' : 'Скрыть редактор'; };
+$('#btnFoldAll').onclick = () => { state.scenes.forEach(x => foldSet.add(x.id)); renderScenes(); };
+$('#btnUnfoldAll').onclick = () => { foldSet.clear(); renderScenes(); };
 $('#btnAddScene').onclick = () => { const p = pal(); state.scenes.push(normScene({ text: 'НОВАЯ *СЦЕНА*', dur: 2.2, bg: 'dark', anim: p.anims[0], trans: p.trans[0], fx: [p.fx[0]] })); renderScenes(); pause(); P.t = startOf(state.scenes.length - 1) + .5; renderNow(); autosave(); };
 $('#btnFit').onclick = () => { if (!state.scenes.length) return; const tg = +$('#durRange').value; distribute(tg); renderScenes(); renderNow(); autosave(); toast(`Время распределено: ${total().toFixed(1)} с`); };
 $('#durRange').oninput = e => $('#durVal').textContent = e.target.value;
@@ -1024,6 +1059,101 @@ $('#btnWorkerSave').onclick = () => { const v = $('#workerUrl').value.trim(); if
 $('#btnWorkerTest').onclick = async () => { const u = Worker.url() || $('#workerUrl').value.trim().replace(/\/+$/, ''); if (!u) return toast('Укажи адрес Worker', true); try { const j = await (await fetch(u + '/health')).json(); toast(j.ok ? `Worker работает (v${j.version}), ключ Gemini: ${j.hasKey ? 'есть' : 'НЕТ'}` : 'Worker ответил ошибкой', !j.ok || !j.hasKey); } catch (e) { toast('Worker недоступен: ' + e.message, true); } };
 
 /* ---------- Init ---------- */
+
+/* ---------- Библиотека: фоны, шрифты, анимации, переходы, элементы, стили ---------- */
+const LIB_CATS = [['all', 'Все'], ['bg', 'Фоны'], ['font', 'Шрифты'], ['anim', 'Анимации'], ['trans', 'Переходы'], ['fx', 'Элементы'], ['style', 'Стили']];
+const LIB_CAT_NAME = { bg: 'Фон', font: 'Шрифт', anim: 'Анимация', trans: 'Переход', fx: 'Элемент', style: 'Стиль' };
+const FONT_TAG = { ab: 'poster', mont: 'sans', osw: 'poster', rubik: 'sans', unb: 'poster', russo: 'poster', bebas: 'poster', pf: 'serif', sg: 'sans', jb: 'mono', inter: 'sans', user: 'user' };
+const LIB_SUBS = {
+  bg: [['all', 'Все'], ['static', 'Статичные'], ['live', 'Анимированные']],
+  font: [['all', 'Все'], ['poster', 'Плакатные'], ['sans', 'Гротески'], ['serif', 'С засечками'], ['mono', 'Моноширинные']],
+  anim: [['all', 'Все'], ['char', 'По буквам'], ['word', 'По словам'], ['line', 'По строкам'], ['whole', 'Целиком']]
+};
+let libCat = 'all', libSub = 'all', libFontsP = null;
+const libDraw = new Map(); let libPlay = null, libIO = null;
+const libA = document.createElement('canvas'), libTmp = document.createElement('canvas');
+function libItems() {
+  const it = [];
+  ENGINE.bg.forEach(id => it.push({ cat: 'bg', id, name: LABEL[id] || id, tag: ['grid', 'rays', 'glow'].includes(id) ? 'live' : 'static' }));
+  FONTS.forEach(f => it.push({ cat: 'font', id: f[0], name: f[1], tag: FONT_TAG[f[0]] || 'sans', fam: f[2], w: f[3] }));
+  if (userFontName) it.push({ cat: 'font', id: 'user', name: 'Свой: ' + userFontLabel, tag: 'user', fam: `'${userFontName}',Impact,sans-serif`, w: 400 });
+  ENGINE.anim.forEach(id => it.push({ cat: 'anim', id, name: ANIMS[id].name, tag: ANIMS[id].unit === 'all' ? 'whole' : ANIMS[id].unit }));
+  ENGINE.trans.forEach(id => it.push({ cat: 'trans', id, name: TRANS[id].name, tag: 'trans' }));
+  ENGINE.fx.forEach(id => it.push({ cat: 'fx', id, name: FX[id].name, tag: 'fx' }));
+  Object.values(STYLES).forEach(st => it.push({ cat: 'style', id: st.id, name: st.name, tag: 'style' }));
+  return it;
+}
+function libFontsReady() { if (!libFontsP) libFontsP = Promise.all(FONTS.map(f => { try { return document.fonts.load(`${f[3]} 32px ${f[2]}`).catch(() => { }); } catch { return null; } })); return libFontsP; }
+function demoCard(c, fill, txt, col) { const W = c.canvas.width, H = c.canvas.height; c.fillStyle = fill; c.fillRect(0, 0, W, H); c.fillStyle = col; c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `${pal().weight} ${H * .2}px ${pal().font}`; c.fillText(txt, W / 2, H / 2); }
+function libMakeDrawer(x) {
+  if (x.cat === 'bg') return (cv, t) => { const c = cv.getContext('2d'), W = cv.width, H = cv.height, p = pal(), bi = drawBg(c, x.id, t === null ? 1.2 : t * 3, W, H, p); c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `${p.weight} ${H * .26}px ${p.font}`; c.fillStyle = bi.fg; c.fillText('Аа', W / 2 - W * .1, H / 2); c.fillStyle = bi.hl; c.fillText('Бб', W / 2 + W * .12, H / 2); };
+  if (x.cat === 'anim') { const sc = { text: 'ТЕКСТ', subtitle: '', dur: 2.4, bg: 'dark', anim: x.id, trans: 'cut', fx: [], dir: 'left', size: 1, demo: true }; return (cv, t) => { const c = cv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); drawScene(c, sc, 0, t === null ? 2.2 : t * 2.2); }; }
+  if (x.cat === 'trans') return (cv, t) => { const c = cv.getContext('2d'), W = cv.width, H = cv.height, p = pal(); libA.width = W; libA.height = H; demoCard(libA.getContext('2d'), p.accent, 'СЦЕНА 1', contrast(p.accent)); demoCard(c, p.bg, 'СЦЕНА 2', p.fg); c.save(); TRANS[x.id].draw(c, libA, t === null ? .5 : t, W, H, p, libTmp); c.restore(); };
+  if (x.cat === 'fx') return (cv, t) => { const c = cv.getContext('2d'), W = cv.width, H = cv.height, p = pal(); c.fillStyle = p.bg; c.fillRect(0, 0, W, H); c.save(); FX[x.id].draw(c, W, H, t === null ? .9 : t * 2.5, 2.5, p.accent, 3.3); c.restore(); };
+  return null;
+}
+const LIB_DUR = { bg: 3, anim: 2.2, trans: 1.2, fx: 2.5 };
+function libStop() { if (libPlay) { cancelAnimationFrame(libPlay.raf); const { cv, fn } = libPlay; libPlay = null; fn(cv, null); } }
+function libPlayCard(cv, cat) {
+  const fn = libDraw.get(cv); if (!fn) return; libStop();
+  const t0 = performance.now(), d = LIB_DUR[cat] || 2; libPlay = { cv, fn, raf: 0 };
+  const step = now => { const t = (now - t0) / 1000 / d; if (t >= 1) { libPlay = null; fn(cv, null); return; } fn(cv, t); libPlay.raf = requestAnimationFrame(step); };
+  libPlay.raf = requestAnimationFrame(step);
+}
+function libSubs() { const box = $('#libSub'), list = LIB_SUBS[libCat]; box.style.display = list ? '' : 'none'; if (list) chips('#libSub', list, libSub, v => { libSub = v; renderLib(); }); }
+function renderLib() {
+  libStop(); if (libIO) libIO.disconnect(); libDraw.clear();
+  const q = $('#libQ').value.trim().toLowerCase(), grid = $('#libGrid');
+  const list = libItems().filter(x => (libCat === 'all' || x.cat === libCat) && (libSub === 'all' || !LIB_SUBS[libCat] || x.tag === libSub) && (!q || (x.name + ' ' + x.id).toLowerCase().includes(q)));
+  $('#libCount').textContent = list.length ? `Найдено: ${list.length}` : 'Ничего не найдено';
+  grid.innerHTML = list.map(x => {
+    let pv;
+    if (x.cat === 'font') pv = `<div class="lp fnt" style="font-family:${x.fam};font-weight:${x.w}">Съешь ещё<br>ABC 123</div>`;
+    else if (x.cat === 'style') { const st = STYLES[x.id]; pv = `<div class="lp sty" style="background:${st.bg};color:${st.fg};font-family:${st.font};font-weight:${st.weight}"><span>${st.upper ? 'ТЕКСТ' : 'Текст'}</span><span style="color:${st.accent}">${st.upper ? 'ВИДЕО' : 'видео'}</span></div>`; }
+    else pv = '<div class="lp"><canvas width="320" height="180"></canvas></div>';
+    return `<div class="li" data-cat="${x.cat}" data-id="${esc(x.id)}">${pv}<div class="ln"><b>${esc(x.name)}</b><span>${LIB_CAT_NAME[x.cat]}</span></div><button class="btn" data-a="apply">Применить</button></div>`;
+  }).join('');
+  const cards = [...grid.querySelectorAll('.li')];
+  libIO = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(en => { if (!en.isIntersecting) return; libIO.unobserve(en.target); const f = libDraw.get(en.target); if (f) f(en.target, null); }), { rootMargin: '200px' }) : null;
+  cards.forEach(card => { const cv = card.querySelector('canvas'); if (!cv) return; const x = { cat: card.dataset.cat, id: card.dataset.id }, fn = libMakeDrawer(x); libDraw.set(cv, fn); if (libIO) libIO.observe(cv); else fn(cv, null); });
+  libMarkUsed();
+}
+function libTargetScene() { return +$('#libScene').value; }
+function libMarkUsed() {
+  const sc = state.scenes[libTargetScene()];
+  document.querySelectorAll('#libGrid .li').forEach(card => {
+    const c = card.dataset.cat, id = card.dataset.id; let on = false;
+    if (c === 'font') on = (state.custom.font || '') === id; else if (c === 'style') on = state.style === id;
+    else if (sc) on = c === 'bg' ? sc.bg === id : c === 'anim' ? sc.anim === id : c === 'trans' ? sc.trans === id : sc.fx.includes(id);
+    card.classList.toggle('used', on); card.querySelector('[data-a=apply]').textContent = on ? '✓ Выбрано' : 'Применить';
+  });
+}
+function libFillScenes() {
+  const sel = $('#libScene'), cur = state.scenes.length ? locate(P.t).i : 0;
+  sel.innerHTML = state.scenes.length ? state.scenes.map((s, i) => `<option value="${i}"${i === cur ? ' selected' : ''}>#${i + 1} · ${esc(String(s.text).replace(/\*/g, '').slice(0, 24))}</option>`).join('') : '<option value="0">Сцен нет</option>';
+}
+async function libApply(cat, id) {
+  if (cat === 'font') { state.custom.font = id; await loadFont(); syncLook(); lookChanged(); toast('Шрифт применён ко всему видео'); return libMarkUsed(); }
+  if (cat === 'style') { state.style = id; await loadFont(); syncUI(); syncLook(); layoutCache.clear(); renderNow(); autosave(); toast('Стиль применён ко всему видео'); return libMarkUsed(); }
+  const i = libTargetScene(), s = state.scenes[i]; if (!s) return toast('Сначала создай сцены', true);
+  if (cat === 'bg') s.bg = id; else if (cat === 'anim') s.anim = id; else if (cat === 'trans') s.trans = id; else if (cat === 'fx') s.fx = [id];
+  layoutCache.clear(); pause(); renderScenes(); P.t = startOf(i) + (cat === 'trans' ? .12 : .3); renderNow(); autosave();
+  toast(cat === 'trans' && i === 0 ? 'Применено, но у первой сцены переход не показывается' : `Применено к сцене #${i + 1}`); libMarkUsed();
+}
+function setView(v) {
+  document.body.classList.toggle('lib', v === 'lib'); document.querySelectorAll('#tabs .tab').forEach(b => b.classList.toggle('on', b.dataset.v === v)); pause(); window.scrollTo(0, 0);
+  if (v === 'lib') { libFillScenes(); libSubs(); libFontsReady().then(renderLib); } else { libStop(); renderNow(); }
+}
+$('#tabs').onclick = e => { const b = e.target.closest('.tab'); if (b) setView(b.dataset.v); };
+chips('#libCat', LIB_CATS, libCat, v => { libCat = v; libSub = 'all'; libSubs(); renderLib(); });
+$('#libQ').oninput = () => renderLib();
+$('#libScene').onchange = () => libMarkUsed();
+$('#libGrid').onclick = e => {
+  const card = e.target.closest('.li'); if (!card) return;
+  if (e.target.closest('[data-a=apply]')) return libApply(card.dataset.cat, card.dataset.id);
+  const cv = card.querySelector('canvas'); if (cv) libPlayCard(cv, card.dataset.cat);
+};
+
 (async function init() {
   $('#voiceSel').innerHTML = ['Fenrir', 'Kore', 'Puck', 'Charon', 'Zephyr', 'Aoede', 'Leda', 'Orus'].map(v => `<option>${v}</option>`).join('');
   initCompat(); $('#srcTag').textContent = Worker.url() ? 'Director: Gemini (Worker)' : 'Director: локальный';
