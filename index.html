@@ -406,7 +406,7 @@ const EXTRA_ANIMS = ['stretch', 'rubber', 'smear', 'tall', 'sweep', 'drop', 'wav
 const EXITS = ['fade', 'shrink', 'grow', 'squeeze', 'drift', 'cut', 'cut'];
 const fontStr = (f, sz) => `${f.italic ? 'italic ' : ''}${f.weight} ${sz}px ${f.family}`;
 function buildBeat(c, toks, pos, W, H, mul, o) {
-  const bx = BOXES[pos], box = { x: bx.x * W, y: bx.y * H, w: bx.w * W, h: bx.h * H };
+  const bx = BOXES[pos], R = o.R || { x: 0, y: 0, w: W, h: H }, box = { x: R.x + bx.x * R.w, y: R.y + bx.y * R.h, w: bx.w * R.w, h: bx.h * R.h };
   const f = o.font, fx = 1, fy = 1; const words = toks.map(t => ({ s: f.upper ? t.s.toUpperCase() : t.s, hl: o.hlAll || t.hl }));
   const cap = Math.min(W, H) * .5 * Math.min(1.1, mul), REF = 100; c.font = fontStr(f, REF);
   const spR = c.measureText(' ').width / REF;
@@ -431,12 +431,13 @@ function buildBeat(c, toks, pos, W, H, mul, o) {
     minX = Math.min(minX, x); maxX = Math.max(maxX, x + lw);
     wd.forEach(q => { q.chars.forEach(k => { items.push({ ch: k.ch, ax: x + k.w / 2, ay, cw: k.w, ci: ci++, wi, li, hl: q.w.hl, sz: size, lh: lhs[li], x: x + k.w / 2 - W / 2 }); x += k.w; }); x += sp; wi++; });
   });
-  return { fy, L: { size: Math.max(...sizes), lh: Math.max(...lhs), items, nChars: ci, nWords: wi, nLines: nL, bx0: minX, bx1: maxX, by0: y0, by1: y0 + Hb, VW: W, VH: H } };
+  return { fy, L: { size: Math.max(...sizes), lh: Math.max(...lhs), items, nChars: ci, nWords: wi, nLines: nL, bx0: minX, bx1: maxX, by0: y0, by1: y0 + Hb, VW: W, VH: H, R: o.R || null } };
 }
 function planBeats(c, sc, W, H, p) {
   const userFont = !!(state.custom && state.custom.font);
   const si = state.scenes.indexOf(sc), start = (si > 0 && sc.trans !== 'cut' && TRANS[sc.trans]) ? Math.min(.4, sc.dur * .5) + .03 : .05; // текст новой сцены начинается после перехода, чтобы не накладываться на прошлую сцену
-  const key = ['B', sc.text, sc.subtitle, state.subs, sc.dur, sc.anim, sc.size, W, H, p.font, p.weight, p.upper, userFont, p.anims.join(), start, !!sc.demo].join('|');
+  const slot = vpnSlot(sc, si, W, H), sig = slot ? [slot.id, ...Object.values(slot.text).map(Math.round)].join(',') : '';
+  const key = ['B', sig, sc.text, sc.subtitle, state.subs, sc.dur, sc.anim, sc.size, W, H, p.font, p.weight, p.upper, userFont, p.anims.join(), start, !!sc.demo].join('|');
   let B = layoutCache.get(key); if (B) return B;
   const toks = phraseTokens(sc, state.subs); B = []; if (!toks.length) { layoutCache.set(key, B); return B; }
   const rng = mkRng(hashStr(sc.text + '|' + sc.subtitle) + 7), chunks = chunkTokens(toks, rng);
@@ -454,7 +455,7 @@ function planBeats(c, sc, W, H, p) {
     const fx = 1, fy = 1; // буквы всегда в родных пропорциях шрифта
     const deco = (anim === 'outlinefill' || sc.demo || rng() >= .2) ? 'none' : 'outline';
     const hlAll = !explicit && !sc.demo && rng() < .28, just = ch.length > 1 && rng() < .55, exit = EXITS[Math.floor(rng() * EXITS.length)];
-    const bb = buildBeat(c, ch, pos, W, H, sc.size || 1, { hlAll, just, fx, fy, font });
+    const bb = buildBeat(c, ch, pos, W, H, sc.size || 1, { hlAll, just, fx, fy, font, R: slot ? slot.text : null });
     const t0 = start + acc / sum * (end - start); acc += wts[i];
     B.push({ t0, t1: i === chunks.length - 1 ? sc.dur : start + acc / sum * (end - start), anim, dir: POS_DIR[pos] || ['left', 'right', 'up', 'down'][Math.floor(rng() * 4)], L: bb.L, font, fx, fy: bb.fy, deco, exit });
   });
@@ -489,6 +490,7 @@ function drawBeats(c, sc, lt, W, H, p, bi, seed, B, ix) {
   // увеличение >1 превращаем в «вырастание из меньшего»: буквы не налезают друг на друга и не вылезают за кадр
   const fitS = v => v > 1 ? Math.max(.35, 1 - (v - 1) * .6) : v;
   const m2 = Math.min(W, H) * .03, capX = L.size * .5, S = []; let tx = 1, ty = 1;
+  const RR = L.R || { x: 0, y: 0, w: W, h: H }, X0 = RR.x + m2, X1 = RR.x + RR.w - m2, Y0 = RR.y + m2, Y1 = RR.y + RR.h - m2; // анимации не выходят за свою область (рядом с рисунком она меньше кадра)
   for (const it of L.items) {
     const k = A.unit === 'char' ? it.ci : A.unit === 'word' ? it.wi : A.unit === 'line' ? it.li : 0;
     const q = n > 1 ? clamp((prog - (k / (n - 1)) * A.stagger) / (1 - A.stagger), 0, 1) : prog;
@@ -501,18 +503,18 @@ function drawBeats(c, sc, lt, W, H, p, bi, seed, B, ix) {
       if (A.unit === 'char' || A.unit === 'word') dx = clamp(dx, -capX, capX);
       if (L.nLines > 1 && A.unit !== 'all') dy = clamp(dy, -it.lh * .45, it.lh * .45);
       // смещение всей фразы ужимается ОДНИМ общим коэффициентом, чтобы самая крайняя буква осталась в кадре (без «слипания» букв у края)
-      if (dx) tx = Math.min(tx, Math.max(0, dx > 0 ? W - m2 - hw - it.ax : it.ax - m2 - hw) / Math.abs(dx));
-      if (dy) ty = Math.min(ty, Math.max(0, dy > 0 ? H - m2 - hh - it.ay : it.ay - m2 - hh) / Math.abs(dy));
+      if (dx) tx = Math.min(tx, Math.max(0, dx > 0 ? X1 - hw - it.ax : it.ax - X0 - hw) / Math.abs(dx));
+      if (dy) ty = Math.min(ty, Math.max(0, dy > 0 ? Y1 - hh - it.ay : it.ay - Y0 - hh) / Math.abs(dy));
     }
     S.push({ it, st, a, asx, asy, hw, hh, dx, dy });
   }
   for (const { it, st, a, asx, asy, hw, hh, dx, dy } of S) {
     if (a <= .001) continue;
     let px = it.ax + (st.clip ? dx : dx * tx), py = it.ay + (st.clip ? dy : dy * ty);
-    if (!st.clip) { px = W - 2 * m2 > 2 * hw ? clamp(px, m2 + hw, W - m2 - hw) : W / 2; py = H - 2 * m2 > 2 * hh ? clamp(py, m2 + hh, H - m2 - hh) : H / 2; }
+    if (!st.clip) { px = X1 - X0 > 2 * hw ? clamp(px, X0 + hw, X1 - hw) : (X0 + X1) / 2; py = Y1 - Y0 > 2 * hh ? clamp(py, Y0 + hh, Y1 - hh) : (Y0 + Y1) / 2; }
     c.save();
-    if (st.clip) { c.beginPath(); c.rect(-50, it.ay - it.lh * .55, L.VW + 100, it.lh * 1.1); c.clip(); }
-    if (st.wipe !== undefined && st.wipe < 1) { c.beginPath(); c.rect(-50, -50, L.bx0 + (L.bx1 - L.bx0) * st.wipe + 50, L.VH + 100); c.clip(); }
+    if (st.clip) { c.beginPath(); c.rect(L.R ? L.R.x : -50, it.ay - it.lh * .55, L.R ? L.R.w : L.VW + 100, it.lh * 1.1); c.clip(); }
+    if (st.wipe !== undefined && st.wipe < 1) { c.beginPath(); c.rect(L.R ? L.R.x : -50, -50, L.bx0 + (L.bx1 - L.bx0) * st.wipe + 50 - (L.R ? L.R.x : 0), L.VH + 100); c.clip(); }
     const rv = st.reveal;
     if (rv && rv.q < 1) {
       const x0 = L.bx0 - 10, x1 = L.bx1 + 10, y0 = L.by0 - 10, y1 = L.by1 + 10, w = x1 - x0, h = y1 - y0, u = rv.q; let r;
@@ -548,16 +550,14 @@ function vpnPlan() {
   }
   return vpnMemo.plan;
 }
-function drawVpnArt(c, sc, idx, lt, W, H, p, bi, B, ix) {
-  if (!VL || sc.demo) return;
-  const id = vpnPlan()[idx]; if (!id || !VL.ART[id]) return;
-  const ar = VL.ART[id].ar, b = B[ix], cur = VL.fitBox(b.L, W, H, ar), prv = ix > 0 ? VL.fitBox(B[ix - 1].L, W, H, ar) : null;
-  const e = 1 - Math.pow(1 - clamp((lt - b.t0) / .45, 0, 1), 3); let box, al = 1;
-  if (cur && prv) box = { x: prv.x + (cur.x - prv.x) * e, y: prv.y + (cur.y - prv.y) * e, w: prv.w + (cur.w - prv.w) * e, h: prv.h + (cur.h - prv.h) * e };
-  else if (cur) { box = cur; if (ix > 0) al = e; }
-  else if (prv) { box = prv; al = 1 - e; }
-  else return;
-  c.save(); c.globalAlpha = al; VL.draw(c, id, box, lt, { a: bi.hl, f: bi.fg, b: bi.fill, s: p.accent }, clamp((lt - .12) / .6, 0, 1)); c.restore();
+function vpnSlot(sc, idx, W, H) { // фиксированное место рисунка на всю сцену + область для текста
+  if (!VL || sc.demo || idx < 0) return null;
+  const id = vpnPlan()[idx]; if (!id || !VL.ART[id]) return null;
+  const sl = VL.slot(W, H, VL.ART[id].ar, idx); sl.id = id; return sl;
+}
+function drawVpnArt(c, slot, lt, p, bi) {
+  if (!slot) return;
+  c.save(); VL.draw(c, slot.id, slot.art, lt, { a: bi.hl, f: bi.fg, b: bi.fill, s: p.accent }, clamp((lt - .1) / .6, 0, 1)); c.restore();
 }
 function vpnizeBgs(scenes) { // для темы VPN подменяет обычные тёмные фоны на анимированные VPN-фоны
   if (!VL || state.vpn === 'off' || !scenes || !scenes.length) return;
@@ -567,15 +567,16 @@ function vpnizeBgs(scenes) { // для темы VPN подменяет обыч�
 function drawScene(c, sc, idx, lt) {
   const W = c.canvas.width, H = c.canvas.height, p = pal(), seed = idx * 13.7 + 1;
   c.save(); c.globalAlpha = 1; c.shadowBlur = 0;
-  const bi = drawBg(c, sc.bg, lt, W, H, p), B = planBeats(c, sc, W, H, p), ix = B.length ? activeBeat(B, lt) : -1;
+  const slot = vpnSlot(sc, idx, W, H), bgKind = (slot && slot.id === 'globe' && sc.bg === 'vpn_globe') ? 'vpn_net' : sc.bg; // два глобуса друг на друге не рисуем
+  const bi = drawBg(c, bgKind, lt, W, H, p), B = planBeats(c, sc, W, H, p), ix = B.length ? activeBeat(B, lt) : -1;
   c.save(); const zs = 1 + .04 * (lt / sc.dur); c.translate(W / 2, H / 2); c.scale(zs, zs); c.translate(-W / 2, -H / 2); // лёгкий «наезд» камеры
   if ((sc.fx || []).length) { // графика сцены рисуется только вне области текста, поэтому ничего не накладывается на буквы
     c.save();
-    if (ix >= 0) { const L = B[ix].L, pad = L.size * .15; c.beginPath(); c.rect(-W, -H, 3 * W, 3 * H); c.rect(L.bx0 - pad, L.by0 - pad, L.bx1 - L.bx0 + pad * 2, L.by1 - L.by0 + pad * 2); c.clip('evenodd'); }
+    if (ix >= 0) { const L = B[ix].L, pad = L.size * .15; c.beginPath(); c.rect(-W, -H, 3 * W, 3 * H); c.rect(L.bx0 - pad, L.by0 - pad, L.bx1 - L.bx0 + pad * 2, L.by1 - L.by0 + pad * 2); if (slot) { const a = slot.art, ap = Math.min(W, H) * .02; c.rect(a.x - ap, a.y - ap, a.w + ap * 2, a.h + ap * 2); } c.clip('evenodd'); }
     sc.fx.forEach((f, j) => { if (FX[f]) FX[f].draw(c, W, H, lt, sc.dur, bi.fx, seed + j * 3.1); });
     c.restore();
   }
-  if (ix >= 0) drawVpnArt(c, sc, idx, lt, W, H, p, bi, B, ix);
+  drawVpnArt(c, slot, lt, p, bi);
   if (ix >= 0) drawBeats(c, sc, lt, W, H, p, bi, seed, B, ix);
   c.restore(); c.restore();
 }
