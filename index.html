@@ -74,6 +74,7 @@ details summary{cursor:pointer;color:var(--dim);font-size:12px;letter-spacing:.1
 
 <section class="card">
   <h2>2б · Оформление</h2>
+  <label class="l">Темп текста<select id="paceSel"><option value="slow">Медленно</option><option value="norm">Нормально</option><option value="fast">Быстро</option></select></label>
   <div class="row">
     <label class="l">Шрифт<select id="fontSel"></select></label>
     <label class="l">Регистр<select id="caseSel"><option value="">Как в стиле</option><option value="1">ЗАГЛАВНЫЕ</option><option value="0">Обычный</option></select></label>
@@ -174,7 +175,8 @@ const E = {
   inOut3: t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2,
   back: t => { const c = 1.70158, c3 = c + 1; return 1 + c3 * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); },
   elastic: t => t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - .75) * (2 * Math.PI / 3)) + 1,
-  expo: t => t === 1 ? 1 : 1 - Math.pow(2, -10 * t)
+  expo: t => t === 1 ? 1 : 1 - Math.pow(2, -10 * t),
+  bounce: t => { const n = 7.5625, d = 2.75; if (t < 1 / d) return n * t * t; if (t < 2 / d) return n * (t -= 1.5 / d) * t + .75; if (t < 2.5 / d) return n * (t -= 2.25 / d) * t + .9375; return n * (t -= 2.625 / d) * t + .984375; }
 };
 
 /* ---------- Styles (расширяемый реестр) ---------- */
@@ -182,16 +184,16 @@ const STYLES = {};
 function registerStyle(s) { STYLES[s.id] = s; }
 const F = { ab: "'Archivo Black',Impact,'Arial Black',sans-serif", bebas: "'Bebas Neue',Impact,sans-serif", pf: "'Playfair Display',Georgia,serif", sg: "'Space Grotesk',Inter,sans-serif", jb: "'JetBrains Mono',Menlo,monospace", inter: "Inter,system-ui,sans-serif" };
 [
-  { id: 'kinetic_dark', name: 'Kinetic', bg: '#0a0a0a', fg: '#ffffff', accent: '#b6ff00', font: F.ab, weight: 400, upper: true, speed: 1, anims: ['pop', 'slide', 'zoom', 'stagger', 'mask', 'words', 'split', 'stretch', 'rubber', 'smear'], trans: ['cut', 'flash', 'swipe', 'zoom'], fx: ['bars', 'burst', 'lines'] },
-  { id: 'dark_neon', name: 'Dark Neon', bg: '#07050f', fg: '#ffffff', accent: '#00f0ff', font: F.sg, weight: 700, upper: true, speed: 1, anims: ['neon', 'blur', 'letters', 'pop', 'stretch', 'sweep'], trans: ['flash', 'blur', 'zoom'], fx: ['rings', 'particles'] },
-  { id: 'minimal', name: 'Minimal', bg: '#111111', fg: '#f4f4f4', accent: '#e6e6e6', font: F.inter, weight: 700, upper: false, speed: .8, anims: ['blur', 'slide', 'mask', 'words', 'sweep', 'stretch'], trans: ['blur', 'cut', 'wipe'], fx: ['lines'] },
-  { id: 'cinematic', name: 'Cinematic', bg: '#050505', fg: '#f6efe4', accent: '#ffb347', font: F.pf, weight: 700, upper: true, speed: .7, anims: ['tracking', 'blur', 'perspective', 'mask', 'stretch', 'sweep'], trans: ['blur', 'zoom', 'cut'], fx: ['particles', 'lines'] },
-  { id: 'tech', name: 'Tech', bg: '#020b12', fg: '#e8fbff', accent: '#00e5ff', font: F.jb, weight: 700, upper: true, speed: 1, anims: ['typewriter', 'glitch', 'letters', 'slide', 'sweep', 'smear'], trans: ['glitch', 'wipe', 'cut'], fx: ['lines', 'rings', 'particles'] },
-  { id: 'glitch', name: 'Glitch', bg: '#08080a', fg: '#ffffff', accent: '#ff2a55', font: F.bebas, weight: 400, upper: true, speed: 1.1, anims: ['glitch', 'explode', 'typewriter', 'zoom', 'tall', 'stretch'], trans: ['glitch', 'flash', 'cut'], fx: ['bars', 'burst'] },
-  { id: 'bold', name: 'Bold', bg: '#0a0a0a', fg: '#ffffff', accent: '#ffe600', font: F.ab, weight: 400, upper: true, speed: 1.1, anims: ['zoom', 'pop', 'elastic', 'split', 'stretch', 'rubber', 'tall'], trans: ['cut', 'swipe', 'flash'], fx: ['burst', 'bars'] },
-  { id: 'editorial', name: 'Editorial', bg: '#141210', fg: '#f3ece2', accent: '#ff6b4a', font: F.pf, weight: 700, upper: false, speed: .85, anims: ['mask', 'slide', 'words', 'perspective', 'sweep', 'smear'], trans: ['wipe', 'cut', 'blur'], fx: ['lines'] },
-  { id: 'explainer', name: 'Explainer', bg: '#0b1220', fg: '#ffffff', accent: '#4ade80', font: F.sg, weight: 700, upper: true, speed: 1, anims: ['words', 'pop', 'stagger', 'slide', 'rubber', 'smear'], trans: ['swipe', 'zoom', 'wipe'], fx: ['rings', 'bars'] },
-  { id: 'viral', name: 'Viral', bg: '#000000', fg: '#ffffff', accent: '#b6ff00', font: F.ab, weight: 400, upper: true, speed: 1.25, anims: ['elastic', 'pop', 'explode', 'rotate', 'zoom', 'rubber', 'stretch', 'tall'], trans: ['flash', 'cut', 'spin'], fx: ['burst', 'particles', 'rings'] }
+  { id: 'kinetic_dark', name: 'Kinetic', bg: '#0a0a0a', fg: '#ffffff', accent: '#b6ff00', font: F.ab, weight: 400, upper: true, speed: 1, anims: ['pop', 'slide', 'zoom', 'stagger', 'mask', 'words', 'split', 'stretch', 'rubber', 'smear', 'drop', 'shake', 'stamp', 'squeeze'], trans: ['cut', 'flash', 'swipe', 'zoom'], fx: ['bars', 'burst', 'lines'] },
+  { id: 'dark_neon', name: 'Dark Neon', bg: '#07050f', fg: '#ffffff', accent: '#00f0ff', font: F.sg, weight: 700, upper: true, speed: 1, anims: ['neon', 'blur', 'letters', 'pop', 'stretch', 'sweep', 'zoomblur', 'outlinefill', 'curtain', 'flashcol'], trans: ['flash', 'blur', 'zoom'], fx: ['rings', 'particles'] },
+  { id: 'minimal', name: 'Minimal', bg: '#111111', fg: '#f4f4f4', accent: '#e6e6e6', font: F.inter, weight: 700, upper: false, speed: .8, anims: ['blur', 'slide', 'mask', 'words', 'sweep', 'stretch', 'curtain', 'blinds', 'wave', 'maskdown'], trans: ['blur', 'cut', 'wipe'], fx: ['lines'] },
+  { id: 'cinematic', name: 'Cinematic', bg: '#050505', fg: '#f6efe4', accent: '#ffb347', font: F.pf, weight: 700, upper: true, speed: .7, anims: ['tracking', 'blur', 'perspective', 'mask', 'stretch', 'sweep', 'zoomblur', 'curtain', 'shrink', 'heartbeat'], trans: ['blur', 'zoom', 'cut'], fx: ['particles', 'lines'] },
+  { id: 'tech', name: 'Tech', bg: '#020b12', fg: '#e8fbff', accent: '#00e5ff', font: F.jb, weight: 700, upper: true, speed: 1, anims: ['typewriter', 'glitch', 'letters', 'slide', 'sweep', 'smear', 'scramble', 'flashcol', 'rollup', 'sweepr'], trans: ['glitch', 'wipe', 'cut'], fx: ['lines', 'rings', 'particles'] },
+  { id: 'glitch', name: 'Glitch', bg: '#08080a', fg: '#ffffff', accent: '#ff2a55', font: F.bebas, weight: 400, upper: true, speed: 1.1, anims: ['glitch', 'explode', 'typewriter', 'zoom', 'tall', 'stretch', 'rgb', 'slice', 'scramble', 'shake'], trans: ['glitch', 'flash', 'cut'], fx: ['bars', 'burst'] },
+  { id: 'bold', name: 'Bold', bg: '#0a0a0a', fg: '#ffffff', accent: '#ffe600', font: F.ab, weight: 400, upper: true, speed: 1.1, anims: ['zoom', 'pop', 'elastic', 'split', 'stretch', 'rubber', 'tall', 'stamp', 'shake', 'stretchw', 'shrink'], trans: ['cut', 'swipe', 'flash'], fx: ['burst', 'bars'] },
+  { id: 'editorial', name: 'Editorial', bg: '#141210', fg: '#f3ece2', accent: '#ff6b4a', font: F.pf, weight: 700, upper: false, speed: .85, anims: ['mask', 'slide', 'words', 'perspective', 'sweep', 'smear', 'maskdown', 'rollup', 'flipword', 'sweepu'], trans: ['wipe', 'cut', 'blur'], fx: ['lines'] },
+  { id: 'explainer', name: 'Explainer', bg: '#0b1220', fg: '#ffffff', accent: '#4ade80', font: F.sg, weight: 700, upper: true, speed: 1, anims: ['words', 'pop', 'stagger', 'slide', 'rubber', 'smear', 'flip', 'bounce', 'jelly', 'sweepd'], trans: ['swipe', 'zoom', 'wipe'], fx: ['rings', 'bars'] },
+  { id: 'viral', name: 'Viral', bg: '#000000', fg: '#ffffff', accent: '#b6ff00', font: F.ab, weight: 400, upper: true, speed: 1.25, anims: ['elastic', 'pop', 'explode', 'rotate', 'zoom', 'rubber', 'stretch', 'tall', 'jelly', 'spin', 'drop', 'swarm', 'trail'], trans: ['flash', 'cut', 'spin'], fx: ['burst', 'particles', 'rings'] }
 ].forEach(registerStyle);
 
 /* ---------- Animation Engine: текст ---------- */
@@ -221,6 +223,36 @@ regAnim('rubber', 'Резиновый', { unit: 'word', stagger: .3, dur: .75, f
 regAnim('tall', 'Вытягивание вверх', { unit: 'char', stagger: .5, dur: .7, fn: q => { const e = E.out3(q); return { a: Math.min(1, q * 5), sx: .55 + .45 * e, sy: 3 - 2 * e }; } });
 regAnim('sweep', 'Проявление слева', { unit: 'all', stagger: 0, dur: .5, fn: q => ({ a: 1, wipe: E.expo(q) }) });
 regAnim('smear', 'Смаз со стороны', { unit: 'word', stagger: .4, dur: .6, fn: (q, c) => { const e = E.expo(q), v = ORG[c.dir] || ORG.left; return { a: Math.min(1, q * 6), x: v[0] * (1 - e) * 8, y: v[1] * (1 - e) * 4, sx: 1 + (1 - e) * (v[0] ? 1.8 : 0), sy: 1 + (1 - e) * (v[0] ? 0 : 1.8) }; } });
+regAnim('drop', 'Падение с отскоком', { unit: 'char', stagger: .6, dur: 1, fn: q => ({ a: q > 0 ? 1 : 0, y: -(1 - E.bounce(q)) * 5 }) });
+regAnim('wave', 'Волна', { unit: 'char', stagger: .7, dur: 1, fn: q => ({ a: Math.min(1, q * 4), y: Math.sin(q * 9) * (1 - q) * .55 }) });
+regAnim('flip', 'Переворот букв', { unit: 'char', stagger: .5, dur: .7, fn: q => ({ a: Math.min(1, q * 5), sx: Math.max(.001, Math.cos((1 - E.out3(q)) * Math.PI / 2)) }) });
+regAnim('flipword', 'Переворот слов', { unit: 'word', stagger: .4, dur: .7, fn: q => ({ a: Math.min(1, q * 5), sy: Math.max(.001, Math.cos((1 - E.out3(q)) * Math.PI / 2)) }) });
+regAnim('spiral', 'Спираль', { unit: 'char', stagger: .5, dur: 1, fn: (q, c) => { const e = E.out3(q), ang = (1 - e) * 7 + c.k, r = (1 - e) * 4; return { a: Math.min(1, q * 4), x: Math.cos(ang) * r, y: Math.sin(ang) * r, s: .3 + .7 * e }; } });
+regAnim('shrink', 'Наезд из камеры', { unit: 'word', stagger: .4, dur: .6, fn: q => { const e = E.out3(q); return { a: Math.min(1, q * 6), s: 5 - 4 * e, blur: (1 - e) * .8 }; } });
+regAnim('fall', 'Падение с поворотом', { unit: 'word', stagger: .45, dur: .8, fn: (q, c) => { const e = E.back(q); return { a: Math.min(1, q * 5), y: -(1 - e) * 5, r: (1 - e) * (c.k % 2 ? .6 : -.6) }; } });
+regAnim('swarm', 'Рой', { unit: 'char', stagger: .3, dur: 1, fn: (q, c) => { const e = E.out3(q); return { a: Math.min(1, q * 3), x: (c.R(1) - .5) * 14 * (1 - e), y: (c.R(2) - .5) * 8 * (1 - e) }; } });
+regAnim('curtain', 'Занавес', { unit: 'all', stagger: 0, dur: .6, fn: q => ({ a: 1, reveal: { t: 'cx', q: E.expo(q) } }) });
+regAnim('blinds', 'Раскрытие по вертикали', { unit: 'all', stagger: 0, dur: .6, fn: q => ({ a: 1, reveal: { t: 'cy', q: E.expo(q) } }) });
+regAnim('sweepr', 'Проявление справа', { unit: 'all', stagger: 0, dur: .5, fn: q => ({ a: 1, reveal: { t: 'r', q: E.expo(q) } }) });
+regAnim('sweepd', 'Проявление сверху', { unit: 'all', stagger: 0, dur: .5, fn: q => ({ a: 1, reveal: { t: 'd', q: E.expo(q) } }) });
+regAnim('sweepu', 'Проявление снизу', { unit: 'all', stagger: 0, dur: .5, fn: q => ({ a: 1, reveal: { t: 'u', q: E.expo(q) } }) });
+regAnim('scramble', 'Перебор символов', { unit: 'char', stagger: .6, dur: 1, fn: (q, c) => ({ a: q > 0 ? 1 : 0, ch: q < .75 ? c.L.items[Math.floor(hrand(Math.floor(c.lt * 22), c.k) * c.L.items.length)].ch : undefined }) });
+regAnim('rollup', 'Выкатывание букв', { unit: 'char', stagger: .6, dur: .8, fn: q => ({ y: (1 - E.expo(q)) * 1.1, clip: true }) });
+regAnim('maskdown', 'Маска сверху', { unit: 'line', stagger: .5, dur: .8, fn: q => ({ y: -(1 - E.expo(q)) * 1.1, clip: true }) });
+regAnim('jelly', 'Желе', { unit: 'char', stagger: .5, dur: .9, fn: q => { const e = E.elastic(q); return { a: Math.min(1, q * 6), sx: 1 + (1 - e) * .9, sy: 1 - (1 - e) * .7 }; } });
+regAnim('heartbeat', 'Пульс', { unit: 'all', stagger: 0, dur: .5, fn: (q, c) => ({ a: Math.min(1, q * 6), s: q < 1 ? E.back(q) : 1 + .04 * Math.sin(c.lt * 9) }) });
+regAnim('shake', 'Удар с тряской', { unit: 'all', stagger: 0, dur: .7, fn: (q, c) => ({ a: q > 0 ? 1 : 0, s: 1 + (1 - E.out3(q)) * .7, x: Math.sin(c.lt * 90) * (1 - q) * .12, y: Math.cos(c.lt * 77) * (1 - q) * .1 }) });
+regAnim('spin', 'Вращение слов', { unit: 'word', stagger: .4, dur: .8, fn: q => { const e = E.out3(q); return { a: Math.min(1, q * 5), r: (1 - e) * Math.PI * 1.5, s: e }; } });
+regAnim('zoomblur', 'Наезд с размытием', { unit: 'word', stagger: .4, dur: .7, fn: q => { const e = E.out3(q); return { a: Math.min(1, q * 4), s: 2.2 - 1.2 * e, blur: 1 - e }; } });
+regAnim('outlinefill', 'Контур → заливка', { unit: 'word', stagger: .4, dur: .9, fn: q => ({ a: Math.min(1, q * 6), outline: q < .5 ? 1 : Math.max(0, 1 - (q - .5) / .4) }) });
+regAnim('trail', 'След', { unit: 'word', stagger: .4, dur: .7, fn: (q, c) => { const e = E.expo(q), v = ORG[c.dir] || ORG.left; return { a: Math.min(1, q * 6), x: v[0] * (1 - e) * 7, y: v[1] * (1 - e) * 4, echo: 1 - e, ex: v[0] * 1.2, ey: v[1] * 1.2 }; } });
+regAnim('flashcol', 'Мигание цветом', { unit: 'char', stagger: .7, dur: .9, fn: (q, c) => ({ a: q > 0 ? 1 : 0, col: q < 1 && hrand(Math.floor(c.lt * 16), c.k) > .45 ? c.acc : undefined }) });
+regAnim('slice', 'Срез', { unit: 'word', stagger: .35, dur: .7, fn: q => ({ a: Math.min(1, q * 6), slice: (1 - E.expo(q)) * 1.4 }) });
+regAnim('rgb', 'RGB-расслоение', { unit: 'word', stagger: .3, dur: .8, fn: q => ({ a: Math.min(1, q * 5), gl: (1 - E.out3(q)) * 1.6 }) });
+regAnim('stamp', 'Штамп', { unit: 'all', stagger: 0, dur: .35, fn: q => ({ a: q > 0 ? 1 : 0, s: 1 + (1 - E.out3(q)) * 2.2, r: (1 - q) * .12 }) });
+regAnim('bounce', 'Подпрыгивание', { unit: 'char', stagger: .5, dur: 1, fn: q => ({ a: q > 0 ? 1 : 0, y: -Math.abs(Math.sin(q * Math.PI * 3)) * (1 - q) * 1.1 }) });
+regAnim('stretchw', 'Широкое растяжение', { unit: 'word', stagger: .3, dur: .7, fn: q => { const e = E.out3(q); return { a: Math.min(1, q * 4), sx: 4 - 3 * e, sy: .4 + .6 * e }; } });
+regAnim('squeeze', 'Сжатие', { unit: 'word', stagger: .3, dur: .7, fn: q => { const e = E.back(q); return { a: Math.min(1, q * 5), sx: .05 + .95 * e, sy: 1 + (1 - e) * .6 }; } });
 regAnim('stagger', 'Stagger', { unit: 'word', stagger: .8, dur: 1.1, fn: q => { const e = E.out3(q); return { a: Math.min(1, q * 3), y: (1 - e), s: .9 + .1 * e, r: (1 - e) * .15 }; } });
 
 /* ---------- FX: элементы сцены ---------- */
@@ -254,7 +286,7 @@ const layoutCache = new Map();
 /* ---------- Render Engine ---------- */
 const cv = $('#cv'), ctx = cv.getContext('2d');
 const offA = document.createElement('canvas'), offB = document.createElement('canvas');
-const state = { title: 'Новый проект', format: '9:16', style: 'kinetic_dark', subs: true, custom: {}, scenes: [] };
+const state = { title: 'Новый проект', format: '9:16', style: 'kinetic_dark', subs: true, pace: 'norm', custom: {}, scenes: [] };
 const SIZES = { '9:16': [720, 1280], '16:9': [1280, 720], '1:1': [1080, 1080] };
 /* ---------- Оформление: шрифты и цвета пользователя ---------- */
 const FONTS = [
@@ -299,9 +331,10 @@ function drawBg(c, kind, lt, W, H, p) {
 }
 /* ---------- Kinetic-движок фразы ----------
    Сцена = одна законченная мысль (text + subtitle). Фон и сцена не меняются, пока мысль не договорена.
-   Внутри сцены фраза режется на «биты» (слово или короткая группа), каждый бит появляется отдельно,
-   крупно, в своём месте кадра и со своей анимацией. Раскладка и тайминг считаются один раз и кэшируются. */
+   Фраза режется на «биты» (слово или короткая группа). Каждый бит получает своё место в кадре, анимацию появления,
+   вариант шрифта, деформацию букв, оформление (контур / жёсткая тень) и уход. Всё детерминировано и кэшируется. */
 const PUNC = /[.,;:!?…]/;
+const TEXT_PACE = { slow: { base: .8, per: .5, anim: 1.3 }, norm: { base: .65, per: .4, anim: 1.15 }, fast: { base: .6, per: .34, anim: 1 } };
 function phraseTokens(sc, withSub) {
   const out = [];
   const add = (t, part) => String(t || '').split(/(\*[^*]+\*)/).filter(Boolean).forEach(sg => {
@@ -315,92 +348,126 @@ function phraseTokens(sc, withSub) {
   add(sc.text, 0); if (withSub) add(sc.subtitle, 1);
   return out;
 }
-// минимум времени, чтобы фразу можно было прочитать до смены сцены
-const readMin = sc => Math.round(clamp(.6 + phraseTokens(sc, true).length * .34, 1.2, 20) * 10) / 10;
+// минимум времени, чтобы фразу можно было прочитать до смены сцены (зависит от выбранного темпа)
+const readMin = sc => { const t = TEXT_PACE[state.pace] || TEXT_PACE.norm; return Math.round(clamp(t.base + phraseTokens(sc, true).length * t.per, 1.2, 20) * 10) / 10; };
 function chunkTokens(toks, rng) {
   const res = []; let i = 0;
   while (i < toks.length) {
-    const r = rng(), len = toks[i].s.length, want = len >= 7 ? 1 : r < .4 ? 1 : r < .85 ? 2 : 3; let take = 1, chars = len;
+    const r = rng(), len = toks[i].s.length, want = len >= 7 ? 1 : len <= 2 ? 2 : r < .4 ? 1 : r < .85 ? 2 : 3; let take = 1, chars = len;
     while (take < want && i + take < toks.length) { const pv = toks[i + take - 1], nx = toks[i + take]; if (PUNC.test(pv.punc) || nx.part !== pv.part || chars + nx.s.length > 16) break; chars += nx.s.length; take++; }
+    // короткие слова-связки (в, на, и...) не остаются в конце группы
+    while (i + take < toks.length && toks[i + take - 1].s.length <= 2 && !PUNC.test(toks[i + take - 1].punc) && toks[i + take].part === toks[i + take - 1].part && chars < 14) { chars += toks[i + take].s.length; take++; }
     res.push(toks.slice(i, i + take)); i += take;
   }
   return res;
 }
-// зоны кадра (доли от экрана); rot — вертикальный текст вдоль левого/правого края
 const BOXES = {
   center: { x: .03, y: .2, w: .94, h: .6, al: 'c', va: 'm' }, top: { x: .03, y: .05, w: .94, h: .4, al: 'c', va: 't' }, bottom: { x: .03, y: .55, w: .94, h: .4, al: 'c', va: 'b' },
   left: { x: .05, y: .2, w: .78, h: .6, al: 'l', va: 'm' }, right: { x: .17, y: .2, w: .78, h: .6, al: 'r', va: 'm' },
-  topleft: { x: .05, y: .05, w: .8, h: .42, al: 'l', va: 't' }, bottomright: { x: .15, y: .53, w: .8, h: .42, al: 'r', va: 'b' },
+  topleft: { x: .05, y: .05, w: .8, h: .42, al: 'l', va: 't' }, topright: { x: .15, y: .05, w: .8, h: .42, al: 'r', va: 't' },
+  bottomleft: { x: .05, y: .53, w: .8, h: .42, al: 'l', va: 'b' }, bottomright: { x: .15, y: .53, w: .8, h: .42, al: 'r', va: 'b' },
   diag: { x: .03, y: .1, w: .94, h: .8, al: 'd', va: 'm' },
   vertL: { x: .04, y: .04, w: .92, h: .46, al: 'c', va: 't', rot: -Math.PI / 2 }, vertR: { x: .04, y: .04, w: .92, h: .46, al: 'c', va: 't', rot: Math.PI / 2 }
 };
-const POS_DIR = { left: 'left', topleft: 'left', vertL: 'left', right: 'right', bottomright: 'right', vertR: 'right', top: 'up', bottom: 'down' };
-function buildBeat(c, toks, pos, W, H, p, mul, hlAll) {
+const POS_DIR = { left: 'left', topleft: 'left', bottomleft: 'left', vertL: 'left', right: 'right', topright: 'right', bottomright: 'right', vertR: 'right', top: 'up', bottom: 'down' };
+// все остальные анимации подмешиваются в выбор для разнообразия (анимации стиля идут с утроенным весом)
+const EXTRA_ANIMS = ['stretch', 'rubber', 'smear', 'tall', 'sweep', 'drop', 'wave', 'flip', 'flipword', 'spiral', 'shrink', 'fall', 'swarm', 'curtain', 'blinds', 'sweepr', 'sweepd', 'sweepu', 'scramble', 'rollup', 'maskdown', 'jelly', 'heartbeat', 'shake', 'spin', 'zoomblur', 'outlinefill', 'trail', 'flashcol', 'slice', 'rgb', 'stamp', 'bounce', 'stretchw', 'squeeze'];
+const EXITS = ['fade', 'shrink', 'grow', 'squeeze', 'drift', 'cut', 'cut'];
+const fontStr = (f, sz) => `${f.italic ? 'italic ' : ''}${f.weight} ${sz}px ${f.family}`;
+function buildBeat(c, toks, pos, W, H, mul, o) {
   const bx = BOXES[pos], rot = bx.rot || 0, VW = rot ? H : W, VH = rot ? W : H, box = { x: bx.x * VW, y: bx.y * VH, w: bx.w * VW, h: bx.h * VH };
-  const words = toks.map(t => ({ s: p.upper ? t.s.toUpperCase() : t.s, hl: hlAll || t.hl })), cap = Math.min(VW, VH) * .5 * Math.min(1.1, mul), REF = 100;
-  c.font = `${p.weight} ${REF}px ${p.font}`;
-  const fit = lines => Math.min(box.w / Math.max(...lines.map(l => c.measureText(l.map(w => w.s).join(' ')).width / REF)), box.h / (lines.length * .98), cap) * .97;
+  const f = o.font, fx = o.fx, fy = o.fy, words = toks.map(t => ({ s: f.upper ? t.s.toUpperCase() : t.s, hl: o.hlAll || t.hl }));
+  const cap = Math.min(VW, VH) * .5 * Math.min(1.1, mul), REF = 100; c.font = fontStr(f, REF);
+  const wref = l => c.measureText(l.map(w => w.s).join(' ')).width / REF * fx;
+  const fitAll = ls => Math.min(box.w / Math.max(...ls.map(wref)), box.h / (ls.length * .98 * fy), cap) * .97;
   const single = [words], stack = words.map(w => [w]); let lines = single;
-  if (words.length > 1 && !rot) lines = (bx.al === 'd' || fit(single) < fit(stack) * .62) ? stack : single;
-  const size = fit(lines); c.font = `${p.weight} ${size}px ${p.font}`;
-  const sp = c.measureText(' ').width, lh = size, nL = lines.length, Hb = nL * lh, items = []; let ci = 0, wi = 0, minX = 1e9, maxX = -1e9;
-  const y0 = bx.va === 't' ? box.y : bx.va === 'b' ? box.y + box.h - Hb : box.y + (box.h - Hb) / 2;
+  if (words.length > 1 && !rot) lines = (bx.al === 'd' || fitAll(single) < fitAll(stack) * .62) ? stack : single;
+  let sizes; // «justify»: каждая строка стопки растягивается на всю ширину, короткое слово получается крупнее
+  if (lines.length > 1 && o.just && !rot) { sizes = lines.map(l => Math.min(box.w / wref(l), cap) * .97); const h0 = sizes.reduce((a, z) => a + z * fy, 0); if (h0 > box.h * .98) { const k = box.h * .98 / h0; sizes = sizes.map(z => z * k); } }
+  else { const z = fitAll(lines); sizes = lines.map(() => z); }
+  const lhs = sizes.map(z => z * fy), Hb = lhs.reduce((a, b) => a + b, 0), nL = lines.length, items = []; let ci = 0, wi = 0, minX = 1e9, maxX = -1e9;
+  const y0 = bx.va === 't' ? box.y : bx.va === 'b' ? box.y + box.h - Hb : box.y + (box.h - Hb) / 2; let yy = y0;
   lines.forEach((ln, li) => {
-    const wd = ln.map(w => { const chars = [...w.s].map(ch => ({ ch, w: c.measureText(ch).width })); return { w, chars, ww: chars.reduce((a, o) => a + o.w, 0) }; });
-    const lw = wd.reduce((a, o) => a + o.ww, 0) + sp * (ln.length - 1); let al = bx.al; if (al === 'd') al = nL > 1 ? (li % 2 === 0 ? 'l' : 'r') : 'c';
-    let x = al === 'l' ? box.x : al === 'r' ? box.x + box.w - lw : box.x + (box.w - lw) / 2; const ay = y0 + li * lh + lh / 2;
+    const size = sizes[li]; c.font = fontStr(f, size); const sp = c.measureText(' ').width * fx;
+    const wd = ln.map(w => { const chars = [...w.s].map(ch => ({ ch, w: c.measureText(ch).width * fx })); return { w, chars, ww: chars.reduce((a, q) => a + q.w, 0) }; });
+    const lw = wd.reduce((a, q) => a + q.ww, 0) + sp * (ln.length - 1); let al = bx.al; if (al === 'd') al = nL > 1 ? (li % 2 === 0 ? 'l' : 'r') : 'c';
+    let x = al === 'l' ? box.x : al === 'r' ? box.x + box.w - lw : box.x + (box.w - lw) / 2; const ay = yy + lhs[li] / 2; yy += lhs[li];
     minX = Math.min(minX, x); maxX = Math.max(maxX, x + lw);
-    wd.forEach(o => { o.chars.forEach(k => { items.push({ ch: k.ch, ax: x + k.w / 2, ay, x: x + k.w / 2 - VW / 2, y: 0, cw: k.w, ci: ci++, wi, li, hl: o.w.hl }); x += k.w; }); x += sp; wi++; });
+    wd.forEach(q => { q.chars.forEach(k => { items.push({ ch: k.ch, ax: x + k.w / 2, ay, x: x + k.w / 2 - VW / 2, y: 0, cw: k.w, ci: ci++, wi, li, hl: q.w.hl, sz: size, lh: lhs[li] }); x += k.w; }); x += sp; wi++; });
   });
-  return { rot, L: { size, lh, items, nChars: ci, nWords: wi, nLines: nL, bx0: minX, bx1: maxX, VW, VH, cx: (minX + maxX) / 2, cy: y0 + Hb / 2 } };
+  return { rot, L: { size: Math.max(...sizes), lh: Math.max(...lhs), items, nChars: ci, nWords: wi, nLines: nL, bx0: minX, bx1: maxX, by0: y0, by1: y0 + Hb, VW, VH, cx: (minX + maxX) / 2, cy: y0 + Hb / 2 } };
 }
 function planBeats(c, sc, W, H, p) {
-  const key = ['B', sc.text, sc.subtitle, state.subs, sc.dur, sc.anim, sc.size, W, H, p.font, p.weight, p.upper, p.anims.join()].join('|');
+  const userFont = !!(state.custom && state.custom.font);
+  const key = ['B', sc.text, sc.subtitle, state.subs, sc.dur, sc.anim, sc.size, W, H, p.font, p.weight, p.upper, userFont, p.anims.join()].join('|');
   let B = layoutCache.get(key); if (B) return B;
   const toks = phraseTokens(sc, state.subs); B = []; if (!toks.length) { layoutCache.set(key, B); return B; }
   const rng = mkRng(hashStr(sc.text + '|' + sc.subtitle) + 7), chunks = chunkTokens(toks, rng), portrait = H >= W * .99;
   const explicit = toks.some(t => t.hl), wts = chunks.map(ch => ch.reduce((a, t) => a + t.s.length, 0) + 2 + (PUNC.test(ch[ch.length - 1].punc) ? 2 : 0)), sum = wts.reduce((a, b) => a + b, 0);
-  const start = .05, end = Math.max(start + .4, sc.dur - .25), pool = [...new Set([sc.anim, ...p.anims, 'stretch', 'rubber', 'smear', 'tall', 'sweep'])].filter(a => ANIMS[a]);
-  let prevPos = '', prevAnim = '', acc = 0;
+  const start = .05, end = Math.max(start + .4, sc.dur - .25), pool = [...p.anims, ...p.anims, ...p.anims, ...EXTRA_ANIMS].filter(a => ANIMS[a]);
+  const baseFont = { family: p.font, weight: p.weight, italic: false, upper: p.upper };
+  let prevPos = '', prevAnim = '', prev2 = '', acc = 0;
   chunks.forEach((ch, i) => {
     const one = ch.length === 1, long1 = one && ch[0].s.length >= 5;
-    let list = one ? ['center', 'top', 'bottom', 'left', 'right', 'topleft', 'bottomright'].concat(long1 && portrait ? ['vertL', 'vertR', 'vertL', 'vertR'] : []) : ['center', 'top', 'bottom', 'diag', 'left', 'right', 'topleft', 'bottomright'];
+    let list = one ? ['center', 'top', 'bottom', 'left', 'right', 'topleft', 'topright', 'bottomleft', 'bottomright'].concat(long1 && portrait ? ['vertL', 'vertR', 'vertL', 'vertR'] : []) : ['center', 'top', 'bottom', 'diag', 'left', 'right', 'topleft', 'topright', 'bottomleft', 'bottomright'];
     if (i === 0) list = ['center', 'top']; list = list.filter(x => x !== prevPos);
     const pos = list[Math.floor(rng() * list.length)] || 'center'; prevPos = pos;
-    const cand = pool.filter(a => a !== prevAnim), anim = i === 0 ? sc.anim : cand[Math.floor(rng() * cand.length)] || sc.anim; prevAnim = anim;
-    const hlAll = !explicit && rng() < .28, bb = buildBeat(c, ch, pos, W, H, p, sc.size || 1, hlAll);
+    const cand = pool.filter(a => a !== prevAnim && a !== prev2), anim = i === 0 ? sc.anim : (cand[Math.floor(rng() * cand.length)] || sc.anim); prev2 = prevAnim; prevAnim = anim;
+    const r1 = rng(), font = (!userFont && one && ch[0].s.length >= 4 && r1 < .22) ? (r1 < .11 ? { family: F.pf, weight: 700, italic: true, upper: p.upper } : { family: F.jb, weight: 700, italic: false, upper: true }) : baseFont;
+    const r2 = rng(), fx = r2 < .15 ? .72 : r2 < .32 ? 1.3 : 1, fy = r2 < .15 ? 1.3 : r2 < .32 ? .82 : 1; // узкие-высокие / широкие-приплюснутые буквы
+    const r3 = rng(), deco = anim === 'outlinefill' ? 'none' : r3 < .14 ? 'outline' : r3 < .3 ? 'shadow' : 'none';
+    const hlAll = !explicit && rng() < .28, just = ch.length > 1 && rng() < .55, exit = EXITS[Math.floor(rng() * EXITS.length)];
+    const bb = buildBeat(c, ch, pos, W, H, sc.size || 1, { hlAll, just, fx, fy, font });
     const t0 = start + acc / sum * (end - start); acc += wts[i];
-    B.push({ t0, t1: i === chunks.length - 1 ? sc.dur : start + acc / sum * (end - start), anim, rot: bb.rot, tilt: (!bb.rot && rng() < .3) ? (rng() - .5) * .12 : 0, dir: POS_DIR[pos] || ['left', 'right', 'up', 'down'][Math.floor(rng() * 4)], L: bb.L });
+    B.push({ t0, t1: i === chunks.length - 1 ? sc.dur : start + acc / sum * (end - start), anim, rot: bb.rot, tilt: (!bb.rot && rng() < .3) ? (rng() - .5) * (rng() < .2 ? .6 : .12) : 0, dir: POS_DIR[pos] || ['left', 'right', 'up', 'down'][Math.floor(rng() * 4)], L: bb.L, font, fx, fy, deco, exit });
   });
   layoutCache.set(key, B); return B;
 }
 function drawBeats(c, sc, lt, W, H, p, bi, seed) {
   const B = planBeats(c, sc, W, H, p); if (!B.length) return;
   let ix = 0; for (let i = 0; i < B.length; i++) if (lt >= B[i].t0) ix = i;
-  const b = B[ix], L = b.L, A = ANIMS[b.anim] || ANIMS.pop, bd = b.t1 - b.t0;
-  const prog = clamp((lt - b.t0) / clamp(A.dur / p.speed, .2, Math.max(.25, bd * .85)), 0, 1);
-  const n = A.unit === 'char' ? L.nChars : A.unit === 'word' ? L.nWords : A.unit === 'line' ? L.nLines : 1;
+  const b = B[ix], L = b.L, A = ANIMS[b.anim] || ANIMS.pop, bd = b.t1 - b.t0, tp = TEXT_PACE[state.pace] || TEXT_PACE.norm;
+  const prog = clamp((lt - b.t0) / clamp(A.dur / p.speed * tp.anim, .2, Math.max(.25, bd * .85)), 0, 1);
+  let ex = 0; if (ix < B.length - 1 && b.exit !== 'cut') { const ed = Math.min(.16, bd * .3); ex = clamp((lt - (b.t1 - ed)) / ed, 0, 1); }
+  const n = A.unit === 'char' ? L.nChars : A.unit === 'word' ? L.nWords : A.unit === 'line' ? L.nLines : 1, ga = 1 - ex;
   c.save();
   if (b.rot) { c.translate(W / 2, H / 2); c.rotate(b.rot); c.translate(-L.VW / 2, -L.VH / 2); }
   if (b.tilt) { c.translate(L.cx, L.cy); c.rotate(b.tilt); c.translate(-L.cx, -L.cy); }
-  c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `${p.weight} ${L.size}px ${p.font}`; c.lineJoin = 'round';
+  if (ex > 0) { c.translate(L.cx, L.cy); if (b.exit === 'shrink') { const k = 1 - .35 * ex; c.scale(k, k); } else if (b.exit === 'grow') { const k = 1 + .5 * ex; c.scale(k, k); } else if (b.exit === 'squeeze') c.scale(1 + ex * 1.1, 1 - ex * .5); else if (b.exit === 'drift') c.translate(0, -ex * L.size * .6); c.translate(-L.cx, -L.cy); }
+  c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineJoin = 'round';
   for (const it of L.items) {
     const k = A.unit === 'char' ? it.ci : A.unit === 'word' ? it.wi : A.unit === 'line' ? it.li : 0;
     const q = n > 1 ? clamp((prog - (k / (n - 1)) * A.stagger) / (1 - A.stagger), 0, 1) : prog;
-    const st = A.fn(q, { k, n, item: it, L, dir: b.dir, lt: lt - b.t0, R: j => hrand(seed + it.ci * 1.7 + b.t0 * 9, j) });
+    const st = A.fn(q, { k, n, item: it, L, dir: b.dir, lt: lt - b.t0, acc: p.accent, R: j => hrand(seed + it.ci * 1.7 + b.t0 * 9, j) });
     const a = st.a === undefined ? 1 : st.a; if (a <= .001) continue;
     c.save();
-    if (st.clip) { c.beginPath(); c.rect(-50, it.ay - L.lh * .55, L.VW + 100, L.lh * 1.1); c.clip(); }
+    if (st.clip) { c.beginPath(); c.rect(-50, it.ay - it.lh * .55, L.VW + 100, it.lh * 1.1); c.clip(); }
     if (st.wipe !== undefined && st.wipe < 1) { c.beginPath(); c.rect(-50, -50, L.bx0 + (L.bx1 - L.bx0) * st.wipe + 50, L.VH + 100); c.clip(); }
+    const rv = st.reveal;
+    if (rv && rv.q < 1) {
+      const x0 = L.bx0 - 10, x1 = L.bx1 + 10, y0 = L.by0 - 10, y1 = L.by1 + 10, w = x1 - x0, h = y1 - y0, u = rv.q; let r;
+      if (rv.t === 'r') r = [x1 - w * u, y0, w * u, h]; else if (rv.t === 'd') r = [x0, y0, w, h * u]; else if (rv.t === 'u') r = [x0, y1 - h * u, w, h * u]; else if (rv.t === 'cx') r = [x0 + w * (1 - u) / 2, y0, w * u, h]; else r = [x0, y0 + h * (1 - u) / 2, w, h * u];
+      c.beginPath(); c.rect(r[0], r[1], r[2], r[3]); c.clip();
+    }
     c.translate(it.ax + (st.x || 0) * L.size, it.ay + (st.y || 0) * L.size);
     if (st.r) c.rotate(st.r);
-    const s = st.s === undefined ? 1 : st.s; c.scale(st.sx === undefined ? s : st.sx, st.sy === undefined ? s : st.sy);
-    c.globalAlpha = clamp(a, 0, 1);
-    const col = it.hl ? bi.hl : bi.fg;
-    if (st.gl > .02) { const o = st.gl * L.size * .07; c.fillStyle = '#ff2bd6'; c.fillText(it.ch, -o, 0); c.fillStyle = '#00f0ff'; c.fillText(it.ch, o, 0); }
-    if (st.glow) { c.shadowColor = it.hl ? p.accent : bi.fg; c.shadowBlur = st.glow * L.size * .3; }
-    if (st.blur) { c.shadowColor = col; c.shadowBlur = st.blur * L.size * .3; }
-    c.fillStyle = col; c.fillText(it.ch, 0, 0);
+    const s = st.s === undefined ? 1 : st.s; c.scale((st.sx === undefined ? s : st.sx) * b.fx, (st.sy === undefined ? s : st.sy) * b.fy);
+    c.font = fontStr(b.font, it.sz); c.globalAlpha = clamp(a, 0, 1) * ga;
+    const col = st.col || (it.hl ? bi.hl : bi.fg), chv = st.ch || it.ch, g0 = c.globalAlpha;
+    if (st.gl > .02) { const o = st.gl * it.sz * .07; c.fillStyle = '#ff2bd6'; c.fillText(chv, -o, 0); c.fillStyle = '#00f0ff'; c.fillText(chv, o, 0); }
+    if (st.echo > 0) for (let j = 3; j >= 1; j--) { c.globalAlpha = g0 * .2 * st.echo * (4 - j) / 3; c.fillStyle = col; c.fillText(chv, (st.ex || 0) * j * it.sz * .45, (st.ey || 0) * j * it.sz * .45); }
+    c.globalAlpha = g0;
+    if (st.slice > .01) {
+      const d = st.slice * it.sz * .5; c.fillStyle = col;
+      for (let h = 0; h < 2; h++) { c.save(); c.beginPath(); c.rect(-it.sz * 2, h ? 0 : -it.sz * 2, it.sz * 4, it.sz * 2); c.clip(); c.translate(h ? -d : d, 0); c.fillText(chv, 0, 0); c.restore(); }
+    } else {
+      if (b.deco === 'shadow') { c.fillStyle = it.hl ? bi.fg : bi.bar; const d = it.sz * .055; c.fillText(chv, d, d); }
+      if (st.glow) { c.shadowColor = it.hl ? p.accent : bi.fg; c.shadowBlur = st.glow * it.sz * .3; }
+      if (st.blur) { c.shadowColor = col; c.shadowBlur = st.blur * it.sz * .3; }
+      const ol = b.deco === 'outline' ? 1 : (st.outline || 0);
+      if (ol > 0) { c.strokeStyle = col; c.lineWidth = it.sz * .045; c.strokeText(chv, 0, 0); }
+      if (ol < 1) { c.globalAlpha = g0 * (1 - ol); c.fillStyle = col; c.fillText(chv, 0, 0); }
+    }
     c.restore();
   }
   c.restore();
@@ -436,6 +503,7 @@ function normScene(s) {
 }
 function loadScenario(sc) {
   if (!sc || !Array.isArray(sc.scenes)) throw new Error('В сценарии нет сцен');
+  if (sc.pace && TEXT_PACE[sc.pace]) state.pace = sc.pace;
   const scenes = sc.scenes.map(normScene).filter(s => s.text);
   if (!scenes.length) throw new Error('В сценарии нет сцен с текстом');
   scenes.forEach(x => { x.dur = Math.max(x.dur, readMin(x)); }); // сцена не сменится, пока фразу нельзя дочитать
@@ -715,7 +783,7 @@ const DB = {
   async run(mode, fn) { const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction('projects', mode), rq = fn(t.objectStore('projects')); t.oncomplete = () => res(rq && rq.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); },
   put(o) { return this.run('readwrite', s => s.put(o)); }, all() { return this.run('readonly', s => s.getAll()); }, get(id) { return this.run('readonly', s => s.get(id)); }, del(id) { return this.run('readwrite', s => s.delete(id)); }
 };
-const snapshot = () => ({ title: state.title, format: state.format, style: state.style, subs: state.subs, custom: state.custom, scenes: state.scenes.map(({ id, ...r }) => r) });
+const snapshot = () => ({ title: state.title, format: state.format, style: state.style, subs: state.subs, pace: state.pace, custom: state.custom, scenes: state.scenes.map(({ id, ...r }) => r) });
 let autoT, curId = null;
 function autosave() { clearTimeout(autoT); autoT = setTimeout(() => DB.put({ id: '__autosave__', name: 'autosave', updated: Date.now(), data: snapshot() }).catch(() => { }), 700); }
 async function refreshProjects() {
@@ -734,7 +802,7 @@ function syncUI() {
   chips('#styleChips', Object.values(STYLES).map(s => [s.id, s.name]), state.style, async v => { state.style = v; await loadFont(); syncLook(); layoutCache.clear(); renderNow(); autosave(); });
   $('#subsOn').checked = state.subs; $('#projName').value = state.title;
 }
-async function loadFont() { const p = pal(); try { await document.fonts.load(`${p.weight} 40px ${p.font}`); } catch { } }
+async function loadFont() { const p = pal(); try { await Promise.all([document.fonts.load(`${p.weight} 40px ${p.font}`), document.fonts.load(`italic 700 40px ${F.pf}`), document.fonts.load(`700 40px ${F.jb}`)]); } catch { } }
 const opt = (list, cur, lab) => list.map(v => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(lab ? lab(v) : v)}</option>`).join('');
 function renderScenes() {
   const box = $('#sceneList'); let a = 0;
@@ -834,9 +902,15 @@ function syncLook() {
   const c = state.custom || {}, p = pal(); buildFontSel();
   $('#fontSel').value = c.font && [...$('#fontSel').options].some(o => o.value === c.font) ? c.font : '';
   $('#caseSel').value = c.upper === true ? '1' : c.upper === false ? '0' : '';
-  $('#colAccent').value = p.accent; $('#colBg').value = p.bg; $('#colFg').value = p.fg;
+  $('#paceSel').value = state.pace; $('#colAccent').value = p.accent; $('#colBg').value = p.bg; $('#colFg').value = p.fg;
 }
 function lookChanged() { layoutCache.clear(); renderNow(); autosave(); }
+$('#paceSel').onchange = e => {
+  state.pace = e.target.value; layoutCache.clear();
+  if (AudioEng.tracks.voice) toast('Длительность сцен задаёт озвучка. Озвучь заново, чтобы применить новый темп.');
+  else { state.scenes.forEach(x => { x.dur = readMin(x); }); renderScenes(); toast('Темп изменён, длительности сцен пересчитаны'); }
+  P.t = clamp(P.t, 0, total()); renderNow(); autosave();
+};
 $('#fontSel').onchange = async e => { if (e.target.value) state.custom.font = e.target.value; else delete state.custom.font; await loadFont(); lookChanged(); };
 $('#caseSel').onchange = e => { const v = e.target.value; if (v === '') delete state.custom.upper; else state.custom.upper = v === '1'; lookChanged(); };
 [['#colAccent', 'accent'], ['#colBg', 'bg'], ['#colFg', 'fg']].forEach(([id, k]) => { $(id).oninput = e => { state.custom[k] = e.target.value.toLowerCase(); renderNow(); autosave(); }; });
