@@ -128,7 +128,8 @@ details summary{cursor:pointer;color:var(--dim);font-size:12px;letter-spacing:.1
     <label class="l">Fade in, с<input type="number" id="fadeIn" value="0.5" min="0" max="5" step="0.1"></label>
     <label class="l">Fade out, с<input type="number" id="fadeOut" value="1" min="0" max="5" step="0.1"></label>
   </div>
-  <div class="row"><label class="l">Голос<select id="voiceSel"></select></label><label class="l">Темп речи<select id="ttsPace"><option value="slow" selected>Спокойно</option><option value="norm">Обычно</option><option value="fast">Бодро</option></select></label></div>
+  <div class="row"><label class="l">Голос<select id="voiceSel"></select></label><label class="l">Темп речи<select id="ttsPace"><option value="slow">Спокойно</option><option value="norm" selected>Обычно</option><option value="fast">Бодро</option></select></label></div>
+  <div class="row"><label class="l">Скорость речи (ускорение записи, голос не меняется)<select id="ttsSpeed"><option value="1">×1.0 как есть</option><option value="1.15">×1.15</option><option value="1.3" selected>×1.3 быстро</option><option value="1.5">×1.5 очень быстро</option><option value="1.7">×1.7 скороговоркой</option></select></label></div>
   <div class="row"><label class="l">Режим озвучки<select id="ttsMode"><option value="fast" selected>Быстро: до 3 частей сразу</option><option value="whole">Целиком: один запрос (дольше)</option></select></label></div>
   <div class="row"><span style="display:none"></span><button class="btn" id="btnTts">Озвучить (TTS)</button><button class="btn" id="btnClearAudio">Убрать звук</button></div>
     <div class="hint">Озвучка читает заголовок и подзаголовок каждой сцены одним голосом, длительность сцены подгоняется под голос. «Быстро» делит сценарий на 3 больших части по границам сцен и озвучивает их одновременно, «Целиком» отправляет один запрос.</div>
@@ -982,7 +983,7 @@ $('#btnClearAudio').onclick = () => { pause(); showVoicePlayer(null); AudioEng.t
 const PACE = {
   slow: 'Говори по-русски очень чётко, неторопливо и спокойно, в замедленном темпе, с короткими паузами между фразами, чтобы каждое слово было хорошо разборчиво.',
   norm: 'Говори по-русски чётко и разборчиво, в умеренном темпе, с выразительными акцентами.',
-  fast: 'Говори по-русски энергично и бодро, но чётко и разборчиво.'
+  fast: 'Говори по-русски быстро, энергично и бодро, в живом быстром темпе, почти без пауз между словами, но чётко и разборчиво.'
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // Один запрос на весь сценарий (или на несколько больших частей, если текст длиннее лимита Worker).
@@ -1036,6 +1037,28 @@ function alignVoice(data, sr, weights) {
   else for (let k = m - 2; k >= 0; k--) { mids[k] = layers[k][bi].c.mid; bi = layers[k][bi].from; }
   return [Math.max(0, sStart - .12), ...mids, Math.min(dur, sEnd + .3)];
 }
+// Ускорение речи без смены тона (WSOLA): окна по 30 мс склеиваются с подбором сдвига по корреляции, поэтому голос не «мультяшный».
+function stretchVoice(x, sr, f) {
+  if (!(f > 1.01) || x.length < sr * .1) return x;
+  const win = Math.round(sr * .03) & ~1, hs = win / 2, ha = hs * f, tol = Math.round(sr * .008), n = x.length, outLen = Math.ceil(n / f) + win, y = new Float32Array(outLen), wsum = new Float32Array(outLen), hann = new Float32Array(win);
+  for (let i = 0; i < win; i++) hann[i] = .5 - .5 * Math.cos(2 * Math.PI * (i + .5) / win);
+  const get = i => (i >= 0 && i < n ? x[i] : 0);
+  let prev = 0, k = 0; // prev — начало предыдущего взятого окна во входе
+  for (let out = 0; out < outLen - win; out += hs, k++) {
+    let a = Math.round(k * ha);
+    if (a >= n) break;
+    if (k > 0) { // ищем сдвиг, при котором начало окна лучше всего продолжает естественное продолжение предыдущего
+      const nat = prev + hs; let best = -Infinity, bd = 0;
+      for (let d = -tol; d <= tol; d += 2) { let c = 0; const s0 = a + d; for (let i = 0; i < hs; i += 4) c += get(s0 + i) * get(nat + i); if (c > best) { best = c; bd = d; } }
+      a += bd;
+    }
+    for (let i = 0; i < win; i++) { const v = get(a + i) * hann[i]; y[out + i] += v; wsum[out + i] += hann[i]; }
+    prev = a;
+  }
+  const len = Math.min(outLen, Math.round(n / f)), r = new Float32Array(len);
+  for (let i = 0; i < len; i++) r[i] = wsum[i] > 1e-3 ? y[i] / wsum[i] : 0;
+  return r;
+}
 function wavBlob(data, sr) { // моно 16 бит
   const n = data.length, b = new DataView(new ArrayBuffer(44 + n * 2)), w = (o, t) => { for (let i = 0; i < t.length; i++) b.setUint8(o + i, t.charCodeAt(i)); };
   w(0, 'RIFF'); b.setUint32(4, 36 + n * 2, true); w(8, 'WAVEfmt '); b.setUint32(16, 16, true); b.setUint16(20, 1, true); b.setUint16(22, 1, true); b.setUint32(24, sr, true); b.setUint32(28, sr * 2, true); b.setUint16(32, 2, true); b.setUint16(34, 16, true); w(36, 'data'); b.setUint32(40, n * 2, true);
@@ -1058,7 +1081,7 @@ $('#btnTts').onclick = async () => {
   let phase = 'Озвучиваю…', t0 = Date.now(); const tick = setInterval(() => { b.textContent = `${phase} ${Math.round((Date.now() - t0) / 1000)} с`; }, 400), status = t => { phase = t; };
   try {
     const ac = AudioEng.ensure(), voice = $('#voiceSel').value, sr = ac.sampleRate;
-    const style = (PACE[$('#ttsPace').value] || PACE.slow) + ' Читай весь текст целиком, ничего не пропуская и не добавляя. Между абзацами (пустыми строками) делай заметную паузу около полусекунды, а внутри абзацев говори слитно.';
+    const style = (PACE[$('#ttsPace').value] || PACE.norm) + ' Читай весь текст целиком, ничего не пропуская и не добавляя. Между абзацами (пустыми строками) делай заметную паузу около полусекунды, а внутри абзацев говори слитно.';
     const texts = state.scenes.map(spokenOf), n = texts.length, voiced = texts.map((t, i) => t ? i : -1).filter(i => i >= 0);
     if (!voiced.length) throw new Error('В сценах нет текста для озвучки');
     const totalChars = voiced.reduce((a, i) => a + texts[i].length + 2, 0), LIM = 8000;
@@ -1073,7 +1096,8 @@ $('#btnTts').onclick = async () => {
       ids.forEach((i, k) => { segs[i] = data.subarray(Math.round(bs[k] * buf.sampleRate), Math.round(bs[k + 1] * buf.sampleRate)); });
       if (groups.length > 1) status(`Готово ${++done}/${groups.length}, обрабатываю…`);
     }));
-    const lastV = voiced[voiced.length - 1];
+    const lastV = voiced[voiced.length - 1], spd = +$('#ttsSpeed').value || 1;
+    if (spd > 1.01) { status('Ускоряю речь…'); await sleep(30); voiced.forEach(i => { segs[i] = stretchVoice(segs[i], sr, spd); }); }
     state.scenes.forEach((s, i) => { if (segs[i]) s.dur = Math.round(clamp(segs[i].length / sr + (i === lastV ? .15 : 0), .8, 40) * 10) / 10; });
     const out = ac.createBuffer(1, Math.ceil((total() + 1) * sr), sr), ch = out.getChannelData(0); let t = 0;
     state.scenes.forEach((s, i) => { if (segs[i]) { const off = Math.round(t * sr), sg = segs[i]; ch.set(off + sg.length <= ch.length ? sg : sg.subarray(0, ch.length - off), off); } t += s.dur; });
