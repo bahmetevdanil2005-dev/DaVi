@@ -598,7 +598,7 @@ function setFormat(fmt) {
 
 /* ---------- Timeline / Scenes ---------- */
 function normScene(s) {
-  return { id: uid(), text: String(s.text || '').slice(0, 160), subtitle: String(s.subtitle || '').slice(0, 100), dur: clamp(+s.dur || 2.5, .8, 20), bg: pickIn(s.bg, ENGINE.bg, 'dark'), anim: pickIn(s.anim, ENGINE.anim, 'pop'), trans: pickIn(s.trans, ENGINE.trans, 'cut'), fx: (Array.isArray(s.fx) ? s.fx : []).map(String).filter((f, i, a) => ENGINE.fx.includes(f) && a.indexOf(f) === i).slice(0, 3), dir: pickIn(s.dir, ENGINE.dir, 'left'), size: clamp(+s.size || 1, .5, 1.5), art: VL ? pickIn(s.art, ['auto', 'none', ...VL.ART_IDS], 'auto') : 'auto' };
+  return { id: uid(), text: String(s.text || '').slice(0, 160), subtitle: String(s.subtitle || '').slice(0, 100), dur: clamp(+s.dur || 2.5, .8, 40), bg: pickIn(s.bg, ENGINE.bg, 'dark'), anim: pickIn(s.anim, ENGINE.anim, 'pop'), trans: pickIn(s.trans, ENGINE.trans, 'cut'), fx: (Array.isArray(s.fx) ? s.fx : []).map(String).filter((f, i, a) => ENGINE.fx.includes(f) && a.indexOf(f) === i).slice(0, 3), dir: pickIn(s.dir, ENGINE.dir, 'left'), size: clamp(+s.size || 1, .5, 1.5), art: VL ? pickIn(s.art, ['auto', 'none', ...VL.ART_IDS], 'auto') : 'auto' };
 }
 function loadScenario(sc) {
   if (!sc || !Array.isArray(sc.scenes)) throw new Error('В сценарии нет сцен');
@@ -779,9 +779,9 @@ const Worker = {
     const ac = new AbortController(), tm = setTimeout(() => ac.abort(), ms);
     try {
       const r = await fetch(this.url() + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ac.signal });
-      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || 'Worker ' + r.status); }
+      if (!r.ok) { const j = await r.json().catch(() => ({})), er = new Error(j.error || 'Worker ' + r.status); er.status = r.status; er.retryAfter = j.retryAfter; throw er; }
       return r;
-    } catch (e) { throw new Error(e.name === 'AbortError' ? 'Worker не ответил вовремя' : e.message); } finally { clearTimeout(tm); }
+    } catch (e) { if (e.name === 'AbortError') throw new Error('Worker не ответил вовремя'); throw e; } finally { clearTimeout(tm); }
   }
 };
 async function direct(brief) {
@@ -978,32 +978,85 @@ const PACE = {
   norm: 'Говори по-русски чётко и разборчиво, в умеренном темпе, с выразительными акцентами.',
   fast: 'Говори по-русски энергично и бодро, но чётко и разборчиво.'
 };
-async function ttsScene(text, voice, style) {
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Один запрос на весь сценарий (или на несколько больших частей, если текст длиннее лимита Worker).
+// Лимит Gemini на бесплатном тарифе — 3 запроса в минуту, поэтому запросов должно быть как можно меньше, а при 429 клиент ждёт и повторяет.
+async function ttsWhole(text, voice, style, status) {
   for (let attempt = 0; ; attempt++) {
     try { const r = await Worker.call('/tts', { text, voice, style }, 125000); return await AudioEng.ensure().decodeAudioData(await r.arrayBuffer()); }
-    catch (e) { if (attempt >= 1) throw e; }
+    catch (e) {
+      const rl = e.status === 429 || /429|rate limit|too_many|RESOURCE_EXHAUSTED/i.test(e.message);
+      if (rl && attempt < 3) {
+        let w = +e.retryAfter || +((/retry in (\d+(?:\.\d+)?)\s*s/i.exec(e.message) || [])[1]) || 60; w = Math.min(95, Math.ceil(w) + 2);
+        for (let k = w; k > 0; k--) { status(`Лимит Gemini, жду ${k} с…`); await sleep(1000); }
+        status('Озвучиваю весь сценарий…'); continue;
+      }
+      if (!rl && attempt < 1) continue; throw e;
+    }
   }
 }
-// Каждая сцена озвучивается отдельно (заголовок + подзаголовок). Длительность сцены = длина реплики + пауза,
-// поэтому голос точно совпадает с тем, что на экране. Реплики склеиваются в одну дорожку.
+// Вес реплики ≈ длительность речи: слоги (гласные) + паузы на запятых и концах предложений.
+const speechWeight = t => Math.max(1, (t.match(/[аеёиоуыэюяaeiouy]/gi) || []).length + 1.2 * (t.match(/[,;:—-]/g) || []).length + 2.5 * (t.match(/[.!?…]/g) || []).length);
+// Находит границы между репликами в одной записи. Реплики разделены паузами, граница выбирается по самым длинным паузам,
+// ближайшим к ожидаемому месту (по доле слогов). Динамическое программирование гарантирует порядок и отсутствие дублей.
+// data — моно-сэмплы, weights — вес каждой реплики. Возвращает m+1 времён (сек): начало записи, m-1 границ, конец речи.
+function alignVoice(data, sr, weights) {
+  const m = weights.length, dur = data.length / sr;
+  if (m <= 1) return [0, dur];
+  const hop = Math.max(1, Math.round(sr * .01)), HS = hop / sr, nF = Math.floor(data.length / hop), rms = new Float32Array(nF);
+  for (let f = 0; f < nF; f++) { let q = 0; const o = f * hop; for (let i = 0; i < hop; i++) { const v = data[o + i]; q += v * v; } rms[f] = Math.sqrt(q / hop); }
+  const sorted = Float32Array.from(rms).sort(), p90 = sorted[Math.floor(nF * .9)] || 0, thr = Math.max(.003, p90 * .07);
+  let first = 0; while (first < nF && rms[first] < thr) first++;
+  let last = nF - 1; while (last > first && rms[last] < thr) last--;
+  const sStart = first * HS, sEnd = (last + 1) * HS, pauses = [];
+  for (let f = first; f <= last;) { if (rms[f] >= thr) { f++; continue; } let e = f; while (e <= last && rms[e] < thr) e++; const len = (e - f) * HS; if (len >= .1) pauses.push({ mid: (f + e) / 2 * HS, len }); f = e; }
+  const sum = weights.reduce((a, b) => a + b, 0); let cum = 0; const T = [];
+  for (let k = 0; k < m - 1; k++) { cum += weights[k]; T.push(sStart + cum / sum * (sEnd - sStart)); }
+  const GAP = Math.min(.5, (sEnd - sStart) / m * .5); let prev = null; const layers = [];
+  for (let k = 0; k < m - 1; k++) {
+    const cand = pauses.concat([{ mid: T[k], len: 0 }]).filter(c => c.mid > sStart + GAP && c.mid < sEnd - GAP);
+    const layer = cand.map(c => ({ c, sc: -Infinity, from: -1 }));
+    layer.forEach((n, j) => {
+      const c = n.c, b = c.len * 6 + (c.len >= .35 ? 2.5 : 0) - .7 * Math.abs(c.mid - T[k]);
+      if (!prev) n.sc = b; else prev.forEach((q, i) => { if (q.sc > -Infinity && q.c.mid + GAP < c.mid && q.sc + b > n.sc) { n.sc = q.sc + b; n.from = i; } });
+    });
+    layers.push(layer); prev = layer;
+  }
+  let bi = -1, bs = -Infinity; prev.forEach((n, j) => { if (n.sc > bs) { bs = n.sc; bi = j; } });
+  const mids = new Array(m - 1);
+  if (bi < 0) { for (let k = 0; k < m - 1; k++) mids[k] = T[k]; }
+  else for (let k = m - 2; k >= 0; k--) { mids[k] = layers[k][bi].c.mid; bi = layers[k][bi].from; }
+  return [Math.max(0, sStart - .12), ...mids, Math.min(dur, sEnd + .3)];
+}
+// Весь сценарий озвучивается целиком (один голос, один запрос). Затем запись режется на реплики по паузам,
+// длительность каждой сцены подгоняется под свою реплику, и дорожка собирается заново вровень со сценами.
 $('#btnTts').onclick = async () => {
   if (!Worker.url()) return toast('Для озвучки укажи адрес Worker в настройках.', true);
   if (!state.scenes.length) return toast('Сначала создай сцены', true);
   const b = $('#btnTts'); b.disabled = true; pause();
+  const status = t => { b.textContent = t; };
   try {
-    const ac = AudioEng.ensure(), voice = $('#voiceSel').value, style = PACE[$('#ttsPace').value] || PACE.slow;
-    const texts = state.scenes.map(spokenOf), n = texts.length, bufs = new Array(n); let next = 0, done = 0;
-    b.textContent = `Озвучиваю 0/${n}…`;
-    await Promise.all(Array.from({ length: Math.min(3, n) }, async () => {
-      while (next < n) { const i = next++; if (texts[i]) bufs[i] = await ttsScene(texts[i], voice, style); b.textContent = `Озвучиваю ${++done}/${n}…`; }
-    }));
-    state.scenes.forEach((s, i) => { s.dur = bufs[i] ? Math.round(clamp(bufs[i].duration + .45, 1.2, 20) * 10) / 10 : s.dur; });
-    const sr = ac.sampleRate, out = ac.createBuffer(1, Math.ceil((total() + 1) * sr), sr), ch = out.getChannelData(0);
-    let t = 0;
-    state.scenes.forEach((s, i) => { if (bufs[i]) { const src = bufs[i].getChannelData(0), off = Math.round((t + .08) * sr); ch.set(off + src.length <= ch.length ? src : src.subarray(0, ch.length - off), off); } t += s.dur; });
+    const ac = AudioEng.ensure(), voice = $('#voiceSel').value, sr = ac.sampleRate;
+    const style = (PACE[$('#ttsPace').value] || PACE.slow) + ' Читай весь текст целиком, ничего не пропуская и не добавляя. Между абзацами (пустыми строками) делай заметную паузу около полусекунды, а внутри абзацев говори слитно.';
+    const texts = state.scenes.map(spokenOf), n = texts.length, voiced = texts.map((t, i) => t ? i : -1).filter(i => i >= 0);
+    if (!voiced.length) throw new Error('В сценах нет текста для озвучки');
+    const groups = []; let cur = [], len = 0; // обычно одна группа; несколько — только для очень длинных сценариев (лимит Worker 9000 знаков)
+    voiced.forEach(i => { if (cur.length && len + texts[i].length + 2 > 8000) { groups.push(cur); cur = []; len = 0; } cur.push(i); len += texts[i].length + 2; });
+    groups.push(cur);
+    const segs = new Array(n);
+    for (let g = 0; g < groups.length; g++) {
+      const ids = groups[g]; status(groups.length > 1 ? `Озвучиваю часть ${g + 1}/${groups.length}…` : 'Озвучиваю весь сценарий…');
+      const buf = await ttsWhole(ids.map(i => texts[i]).join('\n\n'), voice, style, status);
+      const data = buf.getChannelData(0), bs = alignVoice(data, buf.sampleRate, ids.map(i => speechWeight(texts[i])));
+      ids.forEach((i, k) => { segs[i] = data.subarray(Math.round(bs[k] * buf.sampleRate), Math.round(bs[k + 1] * buf.sampleRate)); });
+    }
+    const lastV = voiced[voiced.length - 1];
+    state.scenes.forEach((s, i) => { if (segs[i]) s.dur = Math.round(clamp(segs[i].length / sr + (i === lastV ? .15 : 0), .8, 40) * 10) / 10; });
+    const out = ac.createBuffer(1, Math.ceil((total() + 1) * sr), sr), ch = out.getChannelData(0); let t = 0;
+    state.scenes.forEach((s, i) => { if (segs[i]) { const off = Math.round(t * sr), sg = segs[i]; ch.set(off + sg.length <= ch.length ? sg : sg.subarray(0, ch.length - off), off); } t += s.dur; });
     AudioEng.tracks.voice = out;
-    layoutCache.clear(); renderScenes(); P.t = 0; renderNow(); autosave(); $('#audioHint').textContent = AudioEng.info() + ' Сцены подогнаны под голос. После правки текста озвучь заново.'; toast('Озвучка готова: сцены подогнаны под голос');
-  } catch (e) { toast('TTS: ' + e.message, true); } finally { b.disabled = false; b.textContent = 'Озвучить (TTS)'; }
+    layoutCache.clear(); renderScenes(); P.t = 0; renderNow(); autosave(); $('#audioHint').textContent = AudioEng.info() + ' Весь сценарий озвучен одним голосом, сцены подогнаны под него. После правки текста озвучь заново.'; toast('Озвучка готова: весь сценарий, сцены подогнаны под голос');
+  } catch (e) { console.error(e); toast('TTS: ' + e.message, true); } finally { b.disabled = false; b.textContent = 'Озвучить (TTS)'; }
 };
 
 /* ---------- Оформление: шрифты, цвета, палитра из фото ---------- */
