@@ -129,9 +129,11 @@ details summary{cursor:pointer;color:var(--dim);font-size:12px;letter-spacing:.1
     <label class="l">Fade out, с<input type="number" id="fadeOut" value="1" min="0" max="5" step="0.1"></label>
   </div>
   <div class="row"><label class="l">Голос<select id="voiceSel"></select></label><label class="l">Темп речи<select id="ttsPace"><option value="slow" selected>Спокойно</option><option value="norm">Обычно</option><option value="fast">Бодро</option></select></label></div>
+  <div class="row"><label class="l">Режим озвучки<select id="ttsMode"><option value="fast" selected>Быстро: до 3 частей сразу</option><option value="whole">Целиком: один запрос (дольше)</option></select></label></div>
   <div class="row"><span style="display:none"></span><button class="btn" id="btnTts">Озвучить (TTS)</button><button class="btn" id="btnClearAudio">Убрать звук</button></div>
-    <div class="hint">Озвучка читает заголовок и подзаголовок каждой сцены. Каждая сцена озвучивается отдельно, длительность сцены подгоняется под голос.</div>
+    <div class="hint">Озвучка читает заголовок и подзаголовок каждой сцены одним голосом, длительность сцены подгоняется под голос. «Быстро» делит сценарий на 3 больших части по границам сцен и озвучивает их одновременно, «Целиком» отправляет один запрос.</div>
   <div class="hint" id="audioHint">Звук не подключён. TTS требует адрес Worker в настройках.</div>
+  <audio id="voicePlayer" controls preload="auto" playsinline style="display:none;width:100%;margin-top:6px"></audio>
 </section>
 
 <section class="card ed">
@@ -795,11 +797,15 @@ async function direct(brief) {
 
 /* ---------- Audio Engine ---------- */
 const AudioEng = {
-  ctx: null, tracks: { music: null, voice: null }, vol: { music: .6, voice: 1 }, fi: .5, fo: 1, srcs: [],
+  ctx: null, tracks: { music: null, voice: null }, vol: { music: .6, voice: 1 }, fi: .5, fo: 1, srcs: [], mo: null,
+  // iOS / Safari глушат Web Audio при выключенном беззвучном режиме и в части встроенных браузеров; обычный <audio> играет везде
+  viaEl: /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) || /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent),
+  mediaOut() { if (!this.mo) { const d = this.ensure().createMediaStreamDestination(), el = new Audio(); el.srcObject = d.stream; el.playsInline = true; this.mo = { d, el }; } return this.mo; },
   ensure() { if (!this.ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) throw new Error('Web Audio не поддерживается'); this.ctx = new AC(); } if (this.ctx.state === 'suspended') this.ctx.resume(); return this.ctx; },
   async load(kind, buf) { this.tracks[kind] = await this.ensure().decodeAudioData(buf); },
   start(offset, tot, dest) {
     this.stop(); if (!this.tracks.music && !this.tracks.voice) return; const c = this.ensure();
+    if (!dest && this.viaEl) { const mo = this.mediaOut(); dest = mo.d; mo.el.play().catch(() => { }); }
     for (const kind of ['music', 'voice']) {
       const buf = this.tracks[kind]; if (!buf || offset >= buf.duration) continue;
       const src = c.createBufferSource(), g = c.createGain(), now = c.currentTime, lv = this.vol[kind], rem = Math.max(.05, tot - offset);
@@ -810,7 +816,7 @@ const AudioEng = {
       src.start(now, offset); src.stop(now + rem); this.srcs.push(src);
     }
   },
-  stop() { this.srcs.forEach(s => { try { s.stop(); } catch { } }); this.srcs = []; },
+  stop() { this.srcs.forEach(s => { try { s.stop(); } catch { } }); this.srcs = []; if (this.mo) try { this.mo.el.pause(); } catch { } },
   info() { const m = this.tracks.music, v = this.tracks.voice; return (m ? `Музыка ${m.duration.toFixed(1)} с. ` : '') + (v ? `Озвучка ${v.duration.toFixed(1)} с.` : '') || 'Звук не подключён. TTS требует адрес Worker в настройках.'; }
 };
 
@@ -820,7 +826,7 @@ function renderNow() { if (!P.exporting) renderFrame(ctx, P.t); updateTime(); }
 function play() {
   if (P.exporting) return; const tot = total(); if (!tot) return toast('Сначала создай сцены', true);
   if (P.t >= tot - .01) P.t = 0;
-  try { AudioEng.start(P.t, tot); } catch (e) { toast('Аудио: ' + e.message, true); }
+  try { AudioEng.start(P.t, tot); if (AudioEng.tracks.voice || AudioEng.tracks.music) setTimeout(() => { if (P.playing && AudioEng.ctx && AudioEng.ctx.state !== 'running') toast('Браузер не включил звук. Нажми на страницу и запусти снова, или слушай озвучку в плеере под кнопкой TTS', true); }, 400); } catch (e) { toast('Аудио: ' + e.message, true); }
   P.playing = true; P.t0 = performance.now() - P.t * 1000; $('#btnPlay').textContent = '❚❚'; loop();
 }
 function pause() { P.playing = false; cancelAnimationFrame(P.raf); AudioEng.stop(); $('#btnPlay').textContent = '▶'; }
@@ -972,7 +978,7 @@ $('#musicFile').onchange = async e => { const f = e.target.files[0]; if (!f) ret
 $('#volMusic').oninput = e => { AudioEng.vol.music = e.target.value / 100; };
 $('#fadeIn').onchange = e => { AudioEng.fi = clamp(+e.target.value || 0, 0, 5); };
 $('#fadeOut').onchange = e => { AudioEng.fo = clamp(+e.target.value || 0, 0, 5); };
-$('#btnClearAudio').onclick = () => { pause(); AudioEng.tracks.music = AudioEng.tracks.voice = null; $('#musicFile').value = ''; $('#audioHint').textContent = AudioEng.info(); };
+$('#btnClearAudio').onclick = () => { pause(); showVoicePlayer(null); AudioEng.tracks.music = AudioEng.tracks.voice = null; $('#musicFile').value = ''; $('#audioHint').textContent = AudioEng.info(); };
 const PACE = {
   slow: 'Говори по-русски очень чётко, неторопливо и спокойно, в замедленном темпе, с короткими паузами между фразами, чтобы каждое слово было хорошо разборчиво.',
   norm: 'Говори по-русски чётко и разборчиво, в умеренном темпе, с выразительными акцентами.',
@@ -981,15 +987,17 @@ const PACE = {
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // Один запрос на весь сценарий (или на несколько больших частей, если текст длиннее лимита Worker).
 // Лимит Gemini на бесплатном тарифе — 3 запроса в минуту, поэтому запросов должно быть как можно меньше, а при 429 клиент ждёт и повторяет.
+const ttsCache = new Map(); // повторная озвучка того же текста тем же голосом не ходит в Gemini
 async function ttsWhole(text, voice, style, status) {
+  const ck = voice + '|' + style + '|' + text; if (ttsCache.has(ck)) return ttsCache.get(ck);
   for (let attempt = 0; ; attempt++) {
-    try { const r = await Worker.call('/tts', { text, voice, style }, 125000); return await AudioEng.ensure().decodeAudioData(await r.arrayBuffer()); }
+    try { const r = await Worker.call('/tts', { text, voice, style }, 125000), buf = await AudioEng.ensure().decodeAudioData(await r.arrayBuffer()); if (ttsCache.size > 8) ttsCache.delete(ttsCache.keys().next().value); ttsCache.set(ck, buf); return buf; }
     catch (e) {
       const rl = e.status === 429 || /429|rate limit|too_many|RESOURCE_EXHAUSTED/i.test(e.message);
       if (rl && attempt < 3) {
         let w = +e.retryAfter || +((/retry in (\d+(?:\.\d+)?)\s*s/i.exec(e.message) || [])[1]) || 60; w = Math.min(95, Math.ceil(w) + 2);
         for (let k = w; k > 0; k--) { status(`Лимит Gemini, жду ${k} с…`); await sleep(1000); }
-        status('Озвучиваю весь сценарий…'); continue;
+        status('Озвучиваю…'); continue;
       }
       if (!rl && attempt < 1) continue; throw e;
     }
@@ -1028,35 +1036,50 @@ function alignVoice(data, sr, weights) {
   else for (let k = m - 2; k >= 0; k--) { mids[k] = layers[k][bi].c.mid; bi = layers[k][bi].from; }
   return [Math.max(0, sStart - .12), ...mids, Math.min(dur, sEnd + .3)];
 }
-// Весь сценарий озвучивается целиком (один голос, один запрос). Затем запись режется на реплики по паузам,
-// длительность каждой сцены подгоняется под свою реплику, и дорожка собирается заново вровень со сценами.
+function wavBlob(data, sr) { // моно 16 бит
+  const n = data.length, b = new DataView(new ArrayBuffer(44 + n * 2)), w = (o, t) => { for (let i = 0; i < t.length; i++) b.setUint8(o + i, t.charCodeAt(i)); };
+  w(0, 'RIFF'); b.setUint32(4, 36 + n * 2, true); w(8, 'WAVEfmt '); b.setUint32(16, 16, true); b.setUint16(20, 1, true); b.setUint16(22, 1, true); b.setUint32(24, sr, true); b.setUint32(28, sr * 2, true); b.setUint16(32, 2, true); b.setUint16(34, 16, true); w(36, 'data'); b.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) b.setInt16(44 + i * 2, Math.max(-1, Math.min(1, data[i])) * 32767, true);
+  return new Blob([b.buffer], { type: 'audio/wav' });
+}
+function showVoicePlayer(buf) { // встроенный плеер озвучки: работает и там, где Web Audio молчит
+  const el = $('#voicePlayer'); if (el.dataset.url) URL.revokeObjectURL(el.dataset.url);
+  if (!buf) { el.removeAttribute('src'); el.dataset.url = ''; el.style.display = 'none'; return; }
+  const url = URL.createObjectURL(wavBlob(buf.getChannelData(0), buf.sampleRate)); el.dataset.url = url; el.src = url; el.style.display = 'block';
+}
+// Озвучка: сценарий режется на 1–3 больших части по границам сцен (режим «Быстро») или идёт одним запросом («Целиком»).
+// Части озвучиваются одновременно: время ≈ длине самой длинной части, а не всего сценария. Бесплатный лимит Gemini 3 запроса в минуту
+// как раз вмещает 3 части; при 429 клиент ждёт и повторяет. Каждая запись режется на реплики по паузам, сцены подгоняются под голос,
+// дорожка собирается заново вровень со сценами.
 $('#btnTts').onclick = async () => {
   if (!Worker.url()) return toast('Для озвучки укажи адрес Worker в настройках.', true);
   if (!state.scenes.length) return toast('Сначала создай сцены', true);
   const b = $('#btnTts'); b.disabled = true; pause();
-  const status = t => { b.textContent = t; };
+  let phase = 'Озвучиваю…', t0 = Date.now(); const tick = setInterval(() => { b.textContent = `${phase} ${Math.round((Date.now() - t0) / 1000)} с`; }, 400), status = t => { phase = t; };
   try {
     const ac = AudioEng.ensure(), voice = $('#voiceSel').value, sr = ac.sampleRate;
     const style = (PACE[$('#ttsPace').value] || PACE.slow) + ' Читай весь текст целиком, ничего не пропуская и не добавляя. Между абзацами (пустыми строками) делай заметную паузу около полусекунды, а внутри абзацев говори слитно.';
     const texts = state.scenes.map(spokenOf), n = texts.length, voiced = texts.map((t, i) => t ? i : -1).filter(i => i >= 0);
     if (!voiced.length) throw new Error('В сценах нет текста для озвучки');
-    const groups = []; let cur = [], len = 0; // обычно одна группа; несколько — только для очень длинных сценариев (лимит Worker 9000 знаков)
-    voiced.forEach(i => { if (cur.length && len + texts[i].length + 2 > 8000) { groups.push(cur); cur = []; len = 0; } cur.push(i); len += texts[i].length + 2; });
-    groups.push(cur);
-    const segs = new Array(n);
-    for (let g = 0; g < groups.length; g++) {
-      const ids = groups[g]; status(groups.length > 1 ? `Озвучиваю часть ${g + 1}/${groups.length}…` : 'Озвучиваю весь сценарий…');
+    const totalChars = voiced.reduce((a, i) => a + texts[i].length + 2, 0), LIM = 8000;
+    const parts = $('#ttsMode').value === 'whole' ? Math.ceil(totalChars / LIM) : Math.min(3, Math.max(1, Math.ceil(totalChars / 300)), voiced.length);
+    const groups = [[]], target = totalChars / parts; let acc = 0, gl = 0; // части подряд по границам сцен, примерно равные по длине
+    voiced.forEach(i => { const l = texts[i].length + 2, g = groups[groups.length - 1]; if (g.length && groups.length < parts && (acc + l / 2 > target * groups.length || gl + l > LIM)) { groups.push([]); gl = 0; } groups[groups.length - 1].push(i); acc += l; gl += l; });
+    const segs = new Array(n); let done = 0;
+    status(groups.length > 1 ? `Озвучиваю ${groups.length} части одновременно…` : 'Озвучиваю весь сценарий…');
+    await Promise.all(groups.map(async ids => {
       const buf = await ttsWhole(ids.map(i => texts[i]).join('\n\n'), voice, style, status);
       const data = buf.getChannelData(0), bs = alignVoice(data, buf.sampleRate, ids.map(i => speechWeight(texts[i])));
       ids.forEach((i, k) => { segs[i] = data.subarray(Math.round(bs[k] * buf.sampleRate), Math.round(bs[k + 1] * buf.sampleRate)); });
-    }
+      if (groups.length > 1) status(`Готово ${++done}/${groups.length}, обрабатываю…`);
+    }));
     const lastV = voiced[voiced.length - 1];
     state.scenes.forEach((s, i) => { if (segs[i]) s.dur = Math.round(clamp(segs[i].length / sr + (i === lastV ? .15 : 0), .8, 40) * 10) / 10; });
     const out = ac.createBuffer(1, Math.ceil((total() + 1) * sr), sr), ch = out.getChannelData(0); let t = 0;
     state.scenes.forEach((s, i) => { if (segs[i]) { const off = Math.round(t * sr), sg = segs[i]; ch.set(off + sg.length <= ch.length ? sg : sg.subarray(0, ch.length - off), off); } t += s.dur; });
-    AudioEng.tracks.voice = out;
-    layoutCache.clear(); renderScenes(); P.t = 0; renderNow(); autosave(); $('#audioHint').textContent = AudioEng.info() + ' Весь сценарий озвучен одним голосом, сцены подогнаны под него. После правки текста озвучь заново.'; toast('Озвучка готова: весь сценарий, сцены подогнаны под голос');
-  } catch (e) { console.error(e); toast('TTS: ' + e.message, true); } finally { b.disabled = false; b.textContent = 'Озвучить (TTS)'; }
+    AudioEng.tracks.voice = out; showVoicePlayer(out);
+    layoutCache.clear(); renderScenes(); P.t = 0; renderNow(); autosave(); $('#audioHint').textContent = AudioEng.info() + ' Сцены подогнаны под голос. Слушать: кнопка ▶ у видео или плеер ниже. После правки текста озвучь заново.'; toast(`Озвучка готова за ${Math.round((Date.now() - t0) / 1000)} с: сцены подогнаны под голос`);
+  } catch (e) { console.error(e); toast('TTS: ' + e.message, true); } finally { clearInterval(tick); b.disabled = false; b.textContent = 'Озвучить (TTS)'; }
 };
 
 /* ---------- Оформление: шрифты, цвета, палитра из фото ---------- */
