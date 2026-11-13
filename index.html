@@ -436,18 +436,84 @@ function buildBeat(c, toks, pos, W, H, mul, o) {
   });
   return { fy, L: { size: Math.max(...sizes), lh: Math.max(...lhs), items, nChars: ci, nWords: wi, nLines: nL, bx0: minX, bx1: maxX, by0: y0, by1: y0 + Hb, VW: W, VH: H, R: o.R || null } };
 }
+/* ---------- Точная привязка субтитров к голосу ----------
+   После озвучки по готовой записи каждой сцены находится момент начала КАЖДОГО слова:
+   1) по громкости записи находятся участки речи и паузы (в том числе после ускорения голоса: анализ идёт по итоговому звуку);
+   2) паузы сопоставляются со знаками препинания фразы (динамическое программирование, порядок сохраняется) — это «якоря»;
+   3) между якорями слова распределяются по слогам внутри реальной речи (паузы в расчёт не входят).
+   Группа слов появляется ровно в момент, когда диктор произносит её первое слово (SUB_LEAD — крошечный опережающий запас). */
+const SUB_LEAD = .05;
+let tmSeq = 0;
+function wordWeight(s) {
+  const parts = String(s).split(/[-–]/).filter(Boolean); if (parts.length > 1) return parts.reduce((a, p) => a + wordWeight(p), 0); // Wi-Fi, IP-адрес — по частям
+  const t = String(s).replace(/[^A-Za-zА-Яа-яЁё0-9]/g, ''); if (!t) return 1;
+  if (/^[A-Z]{2,5}$/.test(t)) return t.length;                    // VPN, IP читают по буквам
+  if (/^\d+$/.test(t)) return Math.max(2, Math.ceil(t.length * 1.4)); // числа
+  const v = (t.match(/[аеёиоуыэюяaeiouy]/gi) || []).length; return Math.max(1, v) + .1 * (t.length - v);
+}
+function voicedRuns(x, sr) {
+  const hop = Math.max(1, Math.round(sr * .005)), HS = hop / sr, nF = Math.floor(x.length / hop); if (nF < 4) return [];
+  const r = new Float32Array(nF), q = new Float32Array(nF);
+  for (let f = 0; f < nF; f++) { let a = 0; const o = f * hop; for (let i = 0; i < hop; i++) { const v = x[o + i]; a += v * v; } r[f] = Math.sqrt(a / hop); }
+  for (let f = 0; f < nF; f++) q[f] = (r[Math.max(0, f - 1)] + r[f] + r[Math.min(nF - 1, f + 1)]) / 3;
+  const so = Float32Array.from(q).sort(), pk = so[Math.floor(nF * .95)] || 0, fl = so[Math.floor(nF * .1)] || 0, thr = Math.max(.0015, pk * .05, fl * 3);
+  const runs = []; let st = -1;
+  for (let f = 0; f <= nF; f++) { const v = f < nF && q[f] >= thr; if (v && st < 0) st = f; else if (!v && st >= 0) { runs.push([st * HS, f * HS]); st = -1; } }
+  const m = []; for (const u of runs) { if (m.length && u[0] - m[m.length - 1][1] < .045) m[m.length - 1][1] = u[1]; else m.push([u[0], u[1]]); } // смычки согласных не считаем паузой
+  return m.filter(u => u[1] - u[0] >= .025);
+}
+// toks — слова сцены (phraseTokens(sc, true)). Возвращает { ts: время начала каждого слова от начала записи, on, conf } или null
+function alignTokens(x, sr, toks) {
+  const n = toks.length; if (!n) return null;
+  const runs = voicedRuns(x, sr); if (!runs.length) return null;
+  const w = toks.map(t => wordWeight(t.s)), cw = [0]; w.forEach(v => cw.push(cw[cw.length - 1] + v)); const TW = cw[n];
+  const cum = [0]; runs.forEach(u => cum.push(cum[cum.length - 1] + u[1] - u[0])); const Tv = cum[runs.length], endT = runs[runs.length - 1][1];
+  const toReal = v => { if (v <= 0) return runs[0][0]; for (let j = 0; j < runs.length; j++) if (v < cum[j + 1]) return runs[j][0] + (v - cum[j]); return endT; };
+  const gaps = []; for (let j = 1; j < runs.length; j++) { const d = runs[j][0] - runs[j - 1][1]; if (d >= .07) gaps.push({ gv: cum[j], d, t: runs[j][0] }); }
+  // где по тексту должны быть паузы: после знаков препинания и на стыке заголовка и подзаголовка
+  const Bd = []; for (let k = 0; k < n - 1; k++) { const pu = toks[k].punc || '', strong = /[.!?…]/.test(pu) || (toks[k].part === 0 && toks[k + 1].part === 1); if (strong || /[,;:]/.test(pu)) Bd.push({ tok: k + 1, vb: Tv * cw[k + 1] / TW, strong }); }
+  const m = Bd.length, G = gaps.length, tol = Math.max(.4, Tv * .15), un = tol, INF = 1e9;
+  const dp = Array.from({ length: m + 1 }, () => new Array(G + 1).fill(INF)), bk = Array.from({ length: m + 1 }, () => new Array(G + 1).fill(null)); // индекс j+1: последний занятый промежуток (0 — нет)
+  dp[0][0] = 0;
+  for (let k = 0; k < m; k++) for (let l = 0; l <= G; l++) {
+    const cur = dp[k][l]; if (cur >= INF) continue;
+    if (cur + un < dp[k + 1][l]) { dp[k + 1][l] = cur + un; bk[k + 1][l] = [l, -1]; }
+    for (let j = l; j < G; j++) { const g = gaps[j], dv = Math.abs(g.gv - Bd[k].vb); if (dv > tol * 1.5) continue; const c = dv * .5 + (Bd[k].strong && g.d < .2 ? .25 : 0) - Math.min(.1, g.d * .2); if (cur + c < dp[k + 1][j + 1]) { dp[k + 1][j + 1] = cur + c; bk[k + 1][j + 1] = [l, j]; } }
+  }
+  let bl = 0, bc = INF; for (let l = 0; l <= G; l++) if (dp[m][l] < bc) { bc = dp[m][l]; bl = l; }
+  const asg = new Array(m).fill(-1); for (let k = m, l = bl; k > 0; k--) { const b = bk[k][l]; asg[k - 1] = b[1]; l = b[0]; }
+  const A = [{ tok: 0, v: 0, t: runs[0][0] }]; let hit = 0;
+  Bd.forEach((b, k) => { if (asg[k] >= 0) { const g = gaps[asg[k]]; A.push({ tok: b.tok, v: g.gv, t: g.t }); hit++; } });
+  A.push({ tok: n, v: Tv, t: endT });
+  const ts = new Array(n);
+  for (let a = 0; a < A.length - 1; a++) { const p = A[a], q = A[a + 1], dw = cw[q.tok] - cw[p.tok] || 1;
+    for (let i = p.tok; i < q.tok; i++) ts[i] = i === p.tok ? p.t : toReal(p.v + (q.v - p.v) * (cw[i] - cw[p.tok]) / dw); }
+  for (let i = 1; i < n; i++) if (ts[i] < ts[i - 1] + .04) ts[i] = ts[i - 1] + .04;
+  return { ts, on: runs[0][0], conf: m ? hit / m : 1 };
+}
+// действующая разметка слов сцены (только если она сделана по текущей озвучке и сцена не сдвинулась)
+function voiceTiming(sc, si) {
+  const tm = sc.tm; if (!tm || si < 0 || !AudioEng.tracks.voice) return null;
+  if (tm.sig !== sc.text + '|' + sc.subtitle || Math.abs(tm.t0 - startOf(si)) > .03) return null;
+  return tm;
+}
 function planBeats(c, sc, W, H, p) {
   const userFont = !!(state.custom && state.custom.font);
-  const si = state.scenes.indexOf(sc), start = (si > 0 && sc.trans !== 'cut' && TRANS[sc.trans]) ? Math.min(.4, sc.dur * .5) + .03 : .05; // текст новой сцены начинается после перехода, чтобы не накладываться на прошлую сцену
+  const si = state.scenes.indexOf(sc), tm = voiceTiming(sc, si), start = (!tm && si > 0 && sc.trans !== 'cut' && TRANS[sc.trans]) ? Math.min(.4, sc.dur * .5) + .03 : .05; // текст новой сцены начинается после перехода, чтобы не накладываться на прошлую сцену
   const slot = vpnSlot(sc, si, W, H), sig = slot ? [slot.id, ...Object.values(slot.text).map(Math.round)].join(',') : '';
-  const key = ['B', sig, sc.text, sc.subtitle, state.subs, sc.dur, sc.anim, sc.size, W, H, p.font, p.weight, p.upper, userFont, p.anims.join(), start, !!sc.demo].join('|');
+  const key = ['B', sig, sc.text, sc.subtitle, state.subs, sc.dur, sc.anim, sc.size, W, H, p.font, p.weight, p.upper, userFont, p.anims.join(), start, !!sc.demo, tm ? tm.id : 0].join('|');
   let B = layoutCache.get(key); if (B) return B;
   const toks = phraseTokens(sc, state.subs); B = []; if (!toks.length) { layoutCache.set(key, B); return B; }
   const rng = mkRng(hashStr(sc.text + '|' + sc.subtitle) + 7), chunks = chunkTokens(toks, rng);
   const explicit = toks.some(t => t.hl), wts = chunks.map(ch => ch.reduce((a, t) => a + t.s.length, 0) + 2 + (PUNC.test(ch[ch.length - 1].punc) ? 2 : 0)), sum = wts.reduce((a, b) => a + b, 0);
   const end = Math.max(start + .4, sc.dur - .25), pool = [...p.anims, ...p.anims, ...p.anims, ...EXTRA_ANIMS].filter(a => ANIMS[a]);
   const baseFont = { family: p.font, weight: p.weight, italic: false, upper: p.upper };
-  let prevPos = '', prevAnim = '', prev2 = '', acc = 0;
+  let prevPos = '', prevAnim = '', prev2 = '', acc = 0, starts = null;
+  if (tm) { // группа слов появляется в момент, когда диктор произносит её первое слово
+    starts = []; let wi = 0, last = -1; const nC = chunks.length;
+    chunks.forEach(ch => { let t = tm.ts[wi] === undefined ? last + .3 : tm.ts[wi] - SUB_LEAD; t = Math.max(t, last + .09, 0); starts.push(t); last = t; wi += ch.length; });
+    starts = starts.map((t, i) => Math.min(t, sc.dur - .1 - (nC - 1 - i) * .09));
+  }
   chunks.forEach((ch, i) => {
     const one = ch.length === 1;
     let list = one ? ['center', 'top', 'bottom', 'left', 'right', 'topleft', 'topright', 'bottomleft', 'bottomright'] : ['center', 'top', 'bottom', 'diag', 'left', 'right', 'topleft', 'topright', 'bottomleft', 'bottomright'];
@@ -459,8 +525,8 @@ function planBeats(c, sc, W, H, p) {
     const deco = (anim === 'outlinefill' || sc.demo || rng() >= .2) ? 'none' : 'outline';
     const hlAll = !explicit && !sc.demo && rng() < .28, just = ch.length > 1 && rng() < .55, exit = EXITS[Math.floor(rng() * EXITS.length)];
     const bb = buildBeat(c, ch, pos, W, H, sc.size || 1, { hlAll, just, fx, fy, font, R: slot ? slot.text : null });
-    const t0 = start + acc / sum * (end - start); acc += wts[i];
-    B.push({ t0, t1: i === chunks.length - 1 ? sc.dur : start + acc / sum * (end - start), anim, dir: POS_DIR[pos] || ['left', 'right', 'up', 'down'][Math.floor(rng() * 4)], L: bb.L, font, fx, fy: bb.fy, deco, exit });
+    const t0 = starts ? starts[i] : start + acc / sum * (end - start); acc += wts[i];
+    B.push({ t0, t1: i === chunks.length - 1 ? sc.dur : starts ? starts[i + 1] : start + acc / sum * (end - start), voiced: !!starts, anim, dir: POS_DIR[pos] || ['left', 'right', 'up', 'down'][Math.floor(rng() * 4)], L: bb.L, font, fx, fy: bb.fy, deco, exit });
   });
   layoutCache.set(key, B); return B;
 }
@@ -485,7 +551,7 @@ function drawOutlineGlyph(c, ch, font, sz, col, lw) {
 function drawBeats(c, sc, lt, W, H, p, bi, seed, B, ix) {
   const b = B[ix], L = b.L, A = ANIMS[b.anim] || ANIMS.pop, bd = b.t1 - b.t0, tp = TEXT_PACE[state.pace] || TEXT_PACE.norm;
   const prog = clamp((lt - b.t0) / clamp(A.dur / p.speed * tp.anim, .2, Math.max(.25, bd * .85)), 0, 1);
-  let ex = 0; if (ix < B.length - 1 && b.exit !== 'cut') { const ed = Math.min(.16, bd * .3); ex = clamp((lt - (b.t1 - ed)) / ed, 0, 1); }
+  let ex = 0; if (ix < B.length - 1 && b.exit !== 'cut') { const ed = b.voiced ? Math.min(.07, bd * .2) : Math.min(.16, bd * .3); ex = clamp((lt - (b.t1 - ed)) / ed, 0, 1); }
   const cx = (L.bx0 + L.bx1) / 2, cy = (L.by0 + L.by1) / 2, n = A.unit === 'char' ? L.nChars : A.unit === 'word' ? L.nWords : A.unit === 'line' ? L.nLines : 1, ga = 1 - ex, m = Math.min(W, H) * .04;
   c.save();
   if (ex > 0) { c.translate(cx, cy); if (b.exit === 'shrink') { const k = 1 - .3 * ex; c.scale(k, k); } else if (b.exit === 'grow') { const k = 1 + .02 * ex; c.scale(k, k); } else if (b.exit === 'squeeze') c.scale(1 - ex * .12, 1 - ex * .25); else if (b.exit === 'drift') c.translate(0, -ex * L.size * .4); c.translate(-cx, -cy); }
@@ -567,7 +633,7 @@ function vpnizeBgs(scenes) { // для темы VPN подменяет обыч�
   const ids = VL.BG_IDS; let vi = Math.floor(Math.random() * ids.length), last = '';
   scenes.forEach(s => { if (['dark', 'grid', 'glow', 'rays'].includes(s.bg)) { let id, g = 0; do { id = ids[vi++ % ids.length]; } while (id === last && g++ < 3); s.bg = id; last = id; } });
 }
-function drawScene(c, sc, idx, lt) {
+function drawScene(c, sc, idx, lt, noText) {
   const W = c.canvas.width, H = c.canvas.height, p = pal(), seed = idx * 13.7 + 1;
   c.save(); c.globalAlpha = 1; c.shadowBlur = 0;
   const slot = vpnSlot(sc, idx, W, H), bgKind = (slot && slot.id === 'globe' && sc.bg === 'vpn_globe') ? 'vpn_net' : sc.bg; // два глобуса друг на друге не рисуем
@@ -580,7 +646,7 @@ function drawScene(c, sc, idx, lt) {
     c.restore();
   }
   drawVpnArt(c, slot, lt, p, bi);
-  if (ix >= 0) drawBeats(c, sc, lt, W, H, p, bi, seed, B, ix);
+  if (ix >= 0 && !noText) drawBeats(c, sc, lt, W, H, p, bi, seed, B, ix);
   c.restore(); c.restore();
 }
 // Детерминированная функция: кадр зависит только от времени t (сек) и состояния проекта.
@@ -589,9 +655,9 @@ function renderFrame(c, t) {
   if (!state.scenes.length) { c.fillStyle = pal().bg; c.fillRect(0, 0, W, H); c.fillStyle = '#555'; c.textAlign = 'center'; c.font = `700 ${W * .05}px Inter,sans-serif`; c.fillText('Напиши запрос и нажми «Создать»', W / 2, H / 2); return; }
   const { i, lt } = locate(t), sc = state.scenes[i];
   drawScene(c, sc, i, lt);
-  const T = Math.min(.4, sc.dur * .5);
+  const tmv = voiceTiming(sc, i), T = Math.min(tmv ? .25 : .4, sc.dur * .5); // при озвучке переход короче, чтобы не отнимать время у слов
   if (i > 0 && sc.trans !== 'cut' && lt < T && TRANS[sc.trans]) {
-    const pv = state.scenes[i - 1]; drawScene(offA.getContext('2d'), pv, i - 1, pv.dur);
+    const pv = state.scenes[i - 1]; drawScene(offA.getContext('2d'), pv, i - 1, pv.dur, !!tmv && lt >= tmv.ts[0] - SUB_LEAD); // старый текст уходит, как только начинается новое слово
     c.save(); TRANS[sc.trans].draw(c, offA, lt / T, W, H, pal(), offB); c.restore();
   }
 }
@@ -798,7 +864,7 @@ async function direct(brief) {
 
 /* ---------- Audio Engine ---------- */
 const AudioEng = {
-  ctx: null, tracks: { music: null, voice: null }, vol: { music: .6, voice: 1 }, fi: .5, fo: 1, srcs: [], mo: null,
+  ctx: null, tracks: { music: null, voice: null }, vol: { music: .6, voice: 1 }, fi: .5, fo: 1, srcs: [], mo: null, t0c: null, off: 0, lat: 0,
   // iOS / Safari глушат Web Audio при выключенном беззвучном режиме и в части встроенных браузеров; обычный <audio> играет везде
   viaEl: /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) || /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent),
   mediaOut() { if (!this.mo) { const d = this.ensure().createMediaStreamDestination(), el = new Audio(); el.srcObject = d.stream; el.playsInline = true; this.mo = { d, el }; } return this.mo; },
@@ -816,8 +882,11 @@ const AudioEng = {
       if (fo > 0) { g.gain.setValueAtTime(lv, now + Math.max(0, rem - fo)); g.gain.linearRampToValueAtTime(0, now + rem); }
       src.start(now, offset); src.stop(now + rem); this.srcs.push(src);
     }
+    if (this.srcs.length) { this.t0c = c.currentTime; this.off = offset; this.lat = dest && dest !== this.mo?.d ? 0 : (c.baseLatency || 0) + (c.outputLatency || 0); }
   },
-  stop() { this.srcs.forEach(s => { try { s.stop(); } catch { } }); this.srcs = []; if (this.mo) try { this.mo.el.pause(); } catch { } },
+  // Текущее время ролика по звуку (с поправкой на задержку вывода). null — звук не играет, тогда работают обычные часы.
+  clock() { if (this.t0c === null || !this.srcs.length || !this.ctx || this.ctx.state !== 'running') return null; return Math.max(0, this.off + (this.ctx.currentTime - this.t0c) - this.lat); },
+  stop() { this.srcs.forEach(s => { try { s.stop(); } catch { } }); this.srcs = []; this.t0c = null; if (this.mo) try { this.mo.el.pause(); } catch { } },
   info() { const m = this.tracks.music, v = this.tracks.voice; return (m ? `Музыка ${m.duration.toFixed(1)} с. ` : '') + (v ? `Озвучка ${v.duration.toFixed(1)} с.` : '') || 'Звук не подключён. TTS требует адрес Worker в настройках.'; }
 };
 
@@ -832,7 +901,7 @@ function play() {
 }
 function pause() { P.playing = false; cancelAnimationFrame(P.raf); AudioEng.stop(); $('#btnPlay').textContent = '▶'; }
 function loop() {
-  if (!P.playing) return; P.t = (performance.now() - P.t0) / 1000;
+  if (!P.playing) return; const ack = AudioEng.clock(); P.t = ack !== null ? ack : (performance.now() - P.t0) / 1000; // кадр рисуется по часам звука: слова не расходятся с голосом
   if (P.t >= total()) { P.t = total(); renderNow(); pause(); return; }
   renderNow(); P.raf = requestAnimationFrame(loop);
 }
@@ -866,7 +935,7 @@ async function exportVideo() {
     const t0 = performance.now(); const fi = 1000 / fps; let last = -1e9;
     await new Promise(res => {
       const step = () => {
-        const now = performance.now(), t = (now - t0) / 1000;
+        const now = performance.now(), ack = AudioEng.clock(), t = ack !== null ? ack : (now - t0) / 1000;
         if (now - last >= fi - 2) { last = now; renderFrame(ctx, Math.min(t, tot - .001)); }
         $('#expProg').style.width = Math.min(100, t / tot * 100).toFixed(1) + '%';
         if (cancelExp || t >= tot + .15) return res();
@@ -1099,6 +1168,7 @@ $('#btnTts').onclick = async () => {
     const lastV = voiced[voiced.length - 1], spd = +$('#ttsSpeed').value || 1;
     if (spd > 1.01) { status('Ускоряю речь…'); await sleep(30); voiced.forEach(i => { segs[i] = stretchVoice(segs[i], sr, spd); }); }
     state.scenes.forEach((s, i) => { if (segs[i]) s.dur = Math.round(clamp(segs[i].length / sr + (i === lastV ? .15 : 0), .8, 40) * 10) / 10; });
+    status('Привязываю слова к голосу…'); await sleep(20); { let tA = 0; state.scenes.forEach((s, i) => { delete s.tm; if (segs[i]) { const al = alignTokens(segs[i], sr, phraseTokens(s, true)); if (al) s.tm = { id: ++tmSeq, sig: s.text + '|' + s.subtitle, t0: tA, ts: al.ts, conf: al.conf }; } tA += s.dur; }); }
     const out = ac.createBuffer(1, Math.ceil((total() + 1) * sr), sr), ch = out.getChannelData(0); let t = 0;
     state.scenes.forEach((s, i) => { if (segs[i]) { const off = Math.round(t * sr), sg = segs[i]; ch.set(off + sg.length <= ch.length ? sg : sg.subarray(0, ch.length - off), off); } t += s.dur; });
     AudioEng.tracks.voice = out; showVoicePlayer(out);
