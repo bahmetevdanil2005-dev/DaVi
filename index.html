@@ -931,6 +931,61 @@ let scrubbing = false;
 const CANDS = [['video/webm;codecs=vp9,opus', 'WebM (VP9)'], ['video/webm;codecs=vp8,opus', 'WebM (VP8)'], ['video/webm', 'WebM'], ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'MP4 (H.264)'], ['video/mp4', 'MP4']];
 function supportedFormats() { if (typeof MediaRecorder === 'undefined') return []; return CANDS.filter(([m]) => { try { return MediaRecorder.isTypeSupported(m); } catch { return false; } }); }
 let cancelExp = false, lastUrl = null, wake = null;
+/* ---------- Исправление длительности WebM ----------
+   MediaRecorder не пишет в WebM поле Duration (а время кластеров бывает смещено), из-за чего плееры показывают
+   «Infinity», 0:00 или абсурд вроде «1988 дней». После записи читаем структуру EBML, сдвигаем время кластеров к нулю,
+   считаем длительность по самим кадрам и записываем Duration. Если время в файле выглядит испорченным, берём реальную
+   длительность записи (fallbackMs). Для MP4 не нужно (там длительность пишется корректно). */
+async function fixWebmDuration(blob, fallbackMs, frameMs) {
+  const buf = new Uint8Array(await blob.arrayBuffer()), n = buf.length;
+  const vlen = b => { for (let i = 0; i < 8; i++) if (b & (0x80 >> i)) return i + 1; return 0; };
+  const rId = p => { const l = vlen(buf[p]); if (!l || l > 4 || p + l > n) return null; let v = 0; for (let i = 0; i < l; i++) v = v * 256 + buf[p + i]; return { id: v, len: l }; };
+  const rSize = p => { const l = vlen(buf[p]); if (!l || p + l > n) return null; const m = 0xFF >> l; let v = buf[p] & m, unk = v === m; for (let i = 1; i < l; i++) { v = v * 256 + buf[p + i]; if (buf[p + i] !== 0xFF) unk = false; } return { size: v, len: l, unknown: unk }; };
+  const rUint = (p, l) => { let v = 0; for (let i = 0; i < l; i++) v = v * 256 + buf[p + i]; return v; };
+  const wUint = (p, l, v) => { for (let i = l - 1; i >= 0; i--) { buf[p + i] = v % 256; v = Math.floor(v / 256); } };
+  const TOP = new Set([0x1F43B675, 0x1C53BB6B, 0x1254C367, 0x1549A966, 0x1654AE6B, 0x114D9B74, 0x1941A469, 0x1043A770]);
+  const readBlock = d => { const l = vlen(buf[d]); if (!l) return 0; const v = (buf[d + l] << 8) | buf[d + l + 1]; return v & 0x8000 ? v - 65536 : v; };
+  let p = 0; const e = rId(0); if (!e || e.id !== 0x1A45DFA3) return blob;
+  const es = rSize(e.len); if (!es) return blob; p = e.len + es.len + es.size;
+  const sg = rId(p); if (!sg || sg.id !== 0x18538067) return blob; const ss = rSize(p + sg.len); if (!ss) return blob;
+  const segSizePos = p + sg.len, segDataStart = segSizePos + ss.len, segEnd = ss.unknown ? n : Math.min(n, segDataStart + ss.size);
+  let info = null; const clusters = []; let min = Infinity, max = -Infinity, q = segDataStart, guard = 0;
+  while (q < segEnd && guard++ < 1e6) {
+    const id = rId(q); if (!id) break; const sz = rSize(q + id.len); if (!sz) break; const dStart = q + id.len + sz.len;
+    if (id.id === 0x1549A966) { info = { start: q, dStart, end: Math.min(segEnd, dStart + sz.size) }; q = info.end; continue; }
+    if (id.id === 0x1F43B675) {
+      const cEnd = sz.unknown ? segEnd : Math.min(segEnd, dStart + sz.size), cl = { tc: 0, tcPos: -1, tcLen: 0, rel: [] }; let r = dStart;
+      while (r < cEnd) {
+        const cid = rId(r); if (!cid) { r = cEnd; break; } if (sz.unknown && TOP.has(cid.id)) break;
+        const cs = rSize(r + cid.len); if (!cs) { r = cEnd; break; } const cd = r + cid.len + cs.len, ce = cs.unknown ? cEnd : Math.min(cEnd, cd + cs.size);
+        if (cid.id === 0xE7) { cl.tc = rUint(cd, cs.size); cl.tcPos = cd; cl.tcLen = cs.size; }
+        else if (cid.id === 0xA3) cl.rel.push(readBlock(cd));
+        else if (cid.id === 0xA0) { let g = cd; while (g < ce) { const gid = rId(g); if (!gid) break; const gs = rSize(g + gid.len); if (!gs) break; const gd = g + gid.len + gs.len; if (gid.id === 0xA1) cl.rel.push(readBlock(gd)); g = gd + gs.size; } }
+        r = ce;
+      }
+      if (cl.tcPos >= 0) { clusters.push(cl); cl.rel.forEach(v => { min = Math.min(min, cl.tc + v); max = Math.max(max, cl.tc + v); }); }
+      q = Math.max(r, q + 1); continue;
+    }
+    q = sz.unknown ? segEnd : dStart + sz.size;
+  }
+  if (!info || !clusters.length || !isFinite(min)) return blob;
+  // масштаб времени (по умолчанию 1 000 000 нс = 1 мс) и существующее поле Duration
+  let scale = 1e6, durPos = -1, durLen = 0; for (let r = info.dStart; r < info.end;) { const cid = rId(r); if (!cid) break; const cs = rSize(r + cid.len); if (!cs) break; const cd = r + cid.len + cs.len; if (cid.id === 0x2AD7B1) scale = rUint(cd, cs.size); else if (cid.id === 0x4489 && (cs.size === 8 || cs.size === 4)) { durPos = cd; durLen = cs.size; } r = cd + cs.size; }
+  const base = Math.min(...clusters.map(c => c.tc)), msPer = scale / 1e6, estMs = (max - base) * msPer + (frameMs || 33);
+  const okEst = isFinite(estMs) && estMs > 0 && Math.abs(estMs - fallbackMs) <= Math.max(1500, fallbackMs * .25), durMs = okEst ? estMs : fallbackMs;
+  console.info('[WebM] длительность по кадрам:', Math.round(estMs), 'мс; запись:', Math.round(fallbackMs), 'мс; сдвиг времени:', base, '→ записано:', Math.round(durMs), 'мс');
+  if (base > 0) clusters.forEach(c => wUint(c.tcPos, c.tcLen, c.tc - base));   // начало файла = 0
+  const dv = new DataView(new ArrayBuffer(8)); const durVal = durMs / msPer;
+  if (durPos >= 0) { const d = new DataView(buf.buffer); if (durLen === 8) d.setFloat64(durPos, durVal); else d.setFloat32(durPos, durVal); return new Blob([buf], { type: blob.type }); }
+  dv.setFloat64(0, durVal); const add = new Uint8Array(11); add.set([0x44, 0x89, 0x88]); add.set(new Uint8Array(dv.buffer), 3);
+  const content = buf.subarray(info.dStart, info.end), newSize = content.length + add.length;
+  const hdr = new Uint8Array([0x15, 0x49, 0xA9, 0x66, 0x10 | ((newSize >> 24) & 0x0F), (newSize >> 16) & 255, (newSize >> 8) & 255, newSize & 255]);
+  const parts = [];
+  if (ss.unknown) parts.push(buf.subarray(0, info.start));
+  else { const total = ss.size + (hdr.length + newSize - (info.end - info.start)), s8 = new Uint8Array(8); s8[0] = 0x01; wUint(1, 0, 0); let v = total; for (let i = 7; i >= 1; i--) { s8[i] = v % 256; v = Math.floor(v / 256); } parts.push(buf.subarray(0, segSizePos), s8, buf.subarray(segDataStart, info.start)); }
+  parts.push(hdr, content, add, buf.subarray(info.end));
+  return new Blob(parts, { type: blob.type });
+}
 async function exportVideo() {
   if (P.exporting) { cancelExp = true; return; }
   const tot = total(); if (!tot) return toast('Нет сцен для экспорта', true);
@@ -964,8 +1019,9 @@ async function exportVideo() {
     AudioEng.stop(); if (rec.state !== 'inactive') rec.stop(); await stopped;
     if (cancelExp) { $('#expHint').textContent = 'Экспорт отменён.'; $('#expProg').style.width = '0'; }
     else {
-      const blob = new Blob(chunks, { type: mime.split(';')[0] }); chunks.length = 0;
+      let blob = new Blob(chunks, { type: mime.split(';')[0] }); chunks.length = 0;
       if (!blob.size) throw new Error('Получен пустой файл');
+      if (mime.startsWith('video/webm')) { try { $('#expHint').textContent = 'Проверяю длительность файла…'; blob = await fixWebmDuration(blob, tot * 1000, 1000 / fps); } catch (e) { console.warn('Не удалось исправить длительность WebM:', e); } }
       lastUrl = URL.createObjectURL(blob); const ext = mime.startsWith('video/mp4') ? 'mp4' : 'webm';
       const a = $('#dl'); a.href = lastUrl; a.download = (state.title || 'video').replace(/[^\wа-яё-]+/gi, '_') + '.' + ext; a.style.display = 'block'; a.textContent = `Скачать .${ext} (${(blob.size / 1048576).toFixed(1)} МБ)`;
       $('#expHint').textContent = 'Готово. Формат файла: ' + mime.split(';')[0] + '.'; $('#expProg').style.width = '100%';
