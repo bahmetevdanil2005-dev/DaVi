@@ -107,6 +107,7 @@ details summary{cursor:pointer;color:var(--dim);font-size:12px;letter-spacing:.1
   <div id="swatches" class="chips"></div>
   <div class="hint" id="swHint">Фото не загружается на сервер: цвета считаются прямо в браузере. Нажми на цвет-образец, чтобы сделать его акцентом.</div>
   <label class="l">Тематическая графика: VPN, политика, новости (рисунки в свободном месте кадра)<select id="vpnSel"><option value="auto">Авто — если тема подходит (VPN, политика, новости)</option><option value="on">Всегда включена</option><option value="off">Авто-подбор выключен</option></select></label>
+  <label class="l">Логотипы брендов (YouTube, банки, сервисы — появляются, когда диктор называет компанию)<select id="brandSel"><option value="auto">Включены</option><option value="off">Выключены</option></select></label>
   <button class="btn" id="btnResetLook">Сбросить оформление до стиля</button>
 </section>
 
@@ -183,6 +184,7 @@ details summary{cursor:pointer;color:var(--dim);font-size:12px;letter-spacing:.1
 <script src="vpn-library.js"></script>
 <script src="politics-library.js"></script>
 <script src="news-library.js"></script>
+<script src="brands-library.js"></script>
 <script>
 'use strict';
 // Объединяет тематические библиотеки (VPN, политика, новости) в один объект с тем же API, что у VPNLib.
@@ -337,7 +339,7 @@ const layoutCache = new Map();
 /* ---------- Render Engine ---------- */
 const cv = $('#cv'), ctx = cv.getContext('2d');
 const offA = document.createElement('canvas'), offB = document.createElement('canvas');
-const state = { title: 'Новый проект', format: '9:16', style: 'kinetic_dark', subs: true, pace: 'norm', custom: {}, vpn: 'auto', scenes: [] };
+const state = { title: 'Новый проект', format: '9:16', style: 'kinetic_dark', subs: true, pace: 'norm', custom: {}, vpn: 'auto', brands: 'auto', scenes: [] };
 const SIZES = { '9:16': [720, 1280], '16:9': [1280, 720], '1:1': [1080, 1080] };
 /* ---------- Оформление: шрифты и цвета пользователя ---------- */
 const FONTS = [
@@ -647,6 +649,48 @@ function drawVpnArt(c, slot, lt, p, bi) {
   if (!slot) return;
   c.save(); VL.draw(c, slot.id, slot.art, lt, { a: bi.hl, f: bi.fg, b: bi.fill, s: p.accent }, clamp((lt - .1) / .6, 0, 1)); c.restore();
 }
+/* ---------- Логотипы брендов (brands-library.js): когда диктор называет компанию, рядом появляется её логотип ---------- */
+const logoMemo = new WeakMap();
+function sceneBrands(sc) { // бренды сцены: найденные в тексте + указанные ИИ / вручную (до 3)
+  const BL = window.BrandLib; if (!BL || state.brands === 'off' || sc.demo) return [];
+  const toks = phraseTokens(sc, state.subs), out = [], seen = new Set();
+  BL.scan(toks.map(t => t.s)).forEach(h => { if (out.length < 3 && !seen.has(h.brand.id)) { seen.add(h.brand.id); out.push({ b: h.brand, ti: h.ti }); } });
+  (sc.logos || []).forEach(str => {
+    const b = BL.resolve(str); if (!b || out.length >= 3 || seen.has(b.id)) return; seen.add(b.id);
+    const key = String(b.name).toLowerCase().replace(/[^a-zа-яё0-9]/g, '').slice(0, 5); let ti = -1;
+    if (key.length >= 4) ti = toks.findIndex(t => t.s.toLowerCase().replace(/[^a-zа-яё0-9]/g, '').startsWith(key));
+    out.push({ b, ti });
+  });
+  return out;
+}
+function warmLogos() { // подгрузка логотипов всех сцен (для предпросмотра и обязательно перед экспортом)
+  const BL = window.BrandLib; if (!BL) return Promise.resolve();
+  const list = [], seen = new Set(); state.scenes.forEach(sc => sceneBrands(sc).forEach(x => { if (!seen.has(x.b.id)) { seen.add(x.b.id); list.push(x.b); } }));
+  return BL.preload(list);
+}
+function logoPlan(sc, W, H, B, slot) { // размер, момент появления и место для каждого логотипа; место выбирается так, чтобы не лезть на текст
+  let pl = logoMemo.get(B); if (pl !== undefined) return pl;
+  const items = sceneBrands(sc); if (!items.length || !B.length) { logoMemo.set(B, null); return null; }
+  const cum = []; let acc = 0; B.forEach(b => { cum.push(acc); acc += b.L.nWords; });
+  const beatOf = ti => { let r = 0; cum.forEach((c, i) => { if (c <= ti) r = i; }); return r; };
+  const n = items.length, m = Math.min(W, H); let s = m * (n === 1 ? .22 : n === 2 ? .17 : .14); const gap = s * .16; if (n * s + (n - 1) * gap > W * .9) s = (W * .9 - (n - 1) * gap) / n;
+  const bw = n * s + (n - 1) * gap, bh = s, mx = W * .05, my = H * .055;
+  const C = { TR: [W - mx - bw / 2, my + bh / 2], TL: [mx + bw / 2, my + bh / 2], BR: [W - mx - bw / 2, H - my - bh / 2], BL: [mx + bw / 2, H - my - bh / 2], TC: [W / 2, my + bh / 2], BC: [W / 2, H - my - bh / 2], MR: [W - mx - bw / 2, H / 2], ML: [mx + bw / 2, H / 2] };
+  const order = ['TR', 'TL', 'BR', 'BL', 'TC', 'BC', 'MR', 'ML'], rot = hashStr(sc.text + '|' + sc.subtitle) % 4, names = order.map((_, i) => order[(i + rot) % order.length]);
+  const ov = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+  const pad = s * .14, art = slot ? [slot.art.x - pad, slot.art.y - pad, slot.art.x + slot.art.w + pad, slot.art.y + slot.art.h + pad] : null;
+  let last = null; const pos = B.map(be => {
+    const tb = [be.L.bx0 - pad, be.L.by0 - pad, be.L.bx1 + pad, be.L.by1 + pad], score = nm => { const [cx, cy] = C[nm], r = [cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2]; return ov(r, tb) + (art ? ov(r, art) : 0); };
+    let best = null, bs = 1e18; [...(last ? [last] : []), ...names].forEach(nm => { const v = score(nm); if (v < bs - 1) { bs = v; best = nm; } }); last = best; return C[best];
+  });
+  pl = { items, s, gap, bw, pos, t: items.map(x => x.ti >= 0 ? B[beatOf(x.ti)].t0 : B[0].t0 + .05) };
+  logoMemo.set(B, pl); return pl;
+}
+function drawLogos(c, sc, lt, W, H, B, ix, slot) {
+  const pl = logoPlan(sc, W, H, B, slot); if (!pl) return;
+  const cur = pl.pos[ix], prv = ix > 0 ? pl.pos[ix - 1] : cur, tw = clamp((lt - B[ix].t0) / .3, 0, 1), e = tw * tw * (3 - 2 * tw), x = prv[0] + (cur[0] - prv[0]) * e, y = prv[1] + (cur[1] - prv[1]) * e;
+  pl.items.forEach((it, j) => { const k = (lt - pl.t[j] - j * .08) / .5; if (k > 0) BrandLib.draw(c, it.b, x - pl.bw / 2 + pl.s / 2 + j * (pl.s + pl.gap), y, pl.s, k); });
+}
 function vpnizeBgs(scenes, text) { // для тематического ролика (VPN / политика / новости) подменяет обычные тёмные фоны на анимированные фоны этой темы
   if (!VL || state.vpn === 'off' || !scenes || !scenes.length) return;
   const ids = VL.bgIdsFor(text || ''); let vi = Math.floor(Math.random() * ids.length), last = '';
@@ -665,6 +709,7 @@ function drawScene(c, sc, idx, lt, noText) {
     c.restore();
   }
   drawVpnArt(c, slot, lt, p, bi);
+  if (ix >= 0 && window.BrandLib) drawLogos(c, sc, lt, W, H, B, ix, slot);
   if (ix >= 0 && !noText) drawBeats(c, sc, lt, W, H, p, bi, seed, B, ix);
   c.restore(); c.restore();
 }
@@ -686,7 +731,7 @@ function setFormat(fmt) {
 
 /* ---------- Timeline / Scenes ---------- */
 function normScene(s) {
-  return { id: uid(), text: String(s.text || '').slice(0, 160), subtitle: String(s.subtitle || '').slice(0, 100), dur: clamp(+s.dur || 2.5, .8, 40), bg: pickIn(s.bg, ENGINE.bg, 'dark'), anim: pickIn(s.anim, ENGINE.anim, 'pop'), trans: pickIn(s.trans, ENGINE.trans, 'cut'), fx: (Array.isArray(s.fx) ? s.fx : []).map(String).filter((f, i, a) => ENGINE.fx.includes(f) && a.indexOf(f) === i).slice(0, 3), dir: pickIn(s.dir, ENGINE.dir, 'left'), size: clamp(+s.size || 1, .5, 1.5), art: VL ? pickIn(s.art, ['auto', 'none', ...VL.ART_IDS], 'auto') : 'auto' };
+  return { id: uid(), text: String(s.text || '').slice(0, 160), subtitle: String(s.subtitle || '').slice(0, 100), dur: clamp(+s.dur || 2.5, .8, 40), bg: pickIn(s.bg, ENGINE.bg, 'dark'), anim: pickIn(s.anim, ENGINE.anim, 'pop'), trans: pickIn(s.trans, ENGINE.trans, 'cut'), fx: (Array.isArray(s.fx) ? s.fx : []).map(String).filter((f, i, a) => ENGINE.fx.includes(f) && a.indexOf(f) === i).slice(0, 3), dir: pickIn(s.dir, ENGINE.dir, 'left'), size: clamp(+s.size || 1, .5, 1.5), art: VL ? pickIn(s.art, ['auto', 'none', ...VL.ART_IDS], 'auto') : 'auto', logos: Array.isArray(s.logos) ? s.logos.map(x => String(x).trim().slice(0, 40)).filter(Boolean).slice(0, 3) : [] };
 }
 function loadScenario(sc) {
   if (!sc || !Array.isArray(sc.scenes)) throw new Error('В сценарии нет сцен');
@@ -699,7 +744,8 @@ function loadScenario(sc) {
   if (sc.style && STYLES[sc.style]) state.style = sc.style;
   if (sc.custom !== undefined) state.custom = cleanCustom(sc.custom);
   if (['auto', 'on', 'off'].includes(sc.vpn)) state.vpn = sc.vpn;
-  layoutCache.clear();
+  if (['auto', 'off'].includes(sc.brands)) state.brands = sc.brands;
+  layoutCache.clear(); warmLogos();
 }
 // Что реально произносит диктор: заголовок + подзаголовок (заглавные слова приводятся к обычному написанию, чтобы TTS не читал их по буквам).
 const ACRO = new Set(['ИИ', 'AI', 'США', 'ТВ', 'IT', 'ВВП', 'UI', 'UX', 'CS', 'GPT']);
@@ -872,6 +918,7 @@ const Worker = {
     } catch (e) { if (e.name === 'AbortError') throw new Error('Worker не ответил вовремя'); throw e; } finally { clearTimeout(tm); }
   }
 };
+if (window.BrandLib) { BrandLib.setWorker(() => Worker.url()); BrandLib.setOnReady(() => { if (!P.exporting) renderNow(); }); }
 async function direct(brief) {
   const o = { style: state.style, dur: +$('#durRange').value, format: state.format };
   if (Worker.url()) {
@@ -999,6 +1046,7 @@ async function exportVideo() {
   let rec, stream, adest = null; const chunks = [];
   try {
     await (document.fonts && document.fonts.ready);
+    try { await Promise.race([warmLogos(), new Promise(r => setTimeout(r, 9000))]); } catch { }
     renderFrame(ctx, 0); stream = cv.captureStream(fps);
     if (AudioEng.tracks.music || AudioEng.tracks.voice) { adest = AudioEng.ensure().createMediaStreamDestination(); adest.stream.getAudioTracks().forEach(t => stream.addTrack(t)); }
     rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bps });
@@ -1041,7 +1089,7 @@ const DB = {
   async run(mode, fn) { const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction('projects', mode), rq = fn(t.objectStore('projects')); t.oncomplete = () => res(rq && rq.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); },
   put(o) { return this.run('readwrite', s => s.put(o)); }, all() { return this.run('readonly', s => s.getAll()); }, get(id) { return this.run('readonly', s => s.get(id)); }, del(id) { return this.run('readwrite', s => s.delete(id)); }
 };
-const snapshot = () => ({ title: state.title, format: state.format, style: state.style, subs: state.subs, pace: state.pace, vpn: state.vpn, custom: state.custom, scenes: state.scenes.map(({ id, ...r }) => r) });
+const snapshot = () => ({ title: state.title, format: state.format, style: state.style, subs: state.subs, pace: state.pace, vpn: state.vpn, brands: state.brands, custom: state.custom, scenes: state.scenes.map(({ id, ...r }) => r) });
 let autoT, curId = null;
 function autosave() { clearTimeout(autoT); autoT = setTimeout(() => DB.put({ id: '__autosave__', name: 'autosave', updated: Date.now(), data: snapshot() }).catch(() => { }), 700); }
 async function refreshProjects() {
@@ -1051,7 +1099,7 @@ async function refreshProjects() {
     box.innerHTML = list.length ? list.map(p => `<div class="proj" data-id="${p.id}"><span>${esc(p.name)}</span><button class="btn" data-a="open">Открыть</button><button class="btn" data-a="dup">⧉</button><button class="btn" data-a="del">✕</button></div>`).join('') : '<div class="hint">Сохранённых проектов нет.</div>';
   } catch (e) { box.innerHTML = '<div class="hint bad">Хранилище недоступно: ' + esc(e.message) + '</div>'; }
 }
-function applyData(d) { state.custom = {}; state.vpn = 'auto'; loadScenario(d); if (d.subs !== undefined) state.subs = !!d.subs; syncUI(); syncLook(); setFormat(state.format); P.t = 0; renderNow(); renderScenes(); loadFont().then(() => { layoutCache.clear(); renderNow(); }); }
+function applyData(d) { state.custom = {}; state.vpn = 'auto'; state.brands = 'auto'; loadScenario(d); if (d.subs !== undefined) state.subs = !!d.subs; syncUI(); syncLook(); setFormat(state.format); P.t = 0; renderNow(); renderScenes(); loadFont().then(() => { layoutCache.clear(); renderNow(); }); }
 
 /* ---------- UI ---------- */
 function chips(id, items, cur, on) { const box = $(id); box.innerHTML = items.map(([v, l]) => `<button class="chip${v === cur ? ' on' : ''}" data-v="${v}">${esc(l)}</button>`).join(''); box.onclick = e => { const b = e.target.closest('.chip'); if (!b) return; box.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === b)); on(b.dataset.v); }; }
@@ -1069,13 +1117,13 @@ function renderScenes() {
   box.innerHTML = state.scenes.map((s, i) => { const st = a; a += s.dur; const fd = foldSet.has(s.id); return `<div class="scene${fd ? ' fold' : ''}" data-i="${i}"><div class="sh"><button data-a="fold" title="Свернуть / развернуть">${fd ? '▸' : '▾'}</button><b>#${i + 1}</b><span class="t" data-a="seek">${st.toFixed(1)}–${a.toFixed(1)} с · ${esc(String(s.text).replace(/\*/g, '').slice(0, 30))}</span><button data-a="up">↑</button><button data-a="down">↓</button><button data-a="dup">⧉</button><button data-a="del">✕</button></div><div class="sb">
     <input type="text" data-k="text" value="${esc(s.text)}" placeholder="Фраза (*слово* — акцентным цветом)"><input type="text" data-k="subtitle" value="${esc(s.subtitle)}" placeholder="Продолжение той же мысли">
     <div class="row"><label class="l">Длит., с<input type="number" data-k="dur" value="${s.dur}" min="0.8" max="20" step="0.1"></label><label class="l">Анимация<select data-k="anim">${opt(ENGINE.anim, s.anim, v => ANIMS[v].name)}</select></label></div>
-    <div class="row"><label class="l">Переход<select data-k="trans">${opt(ENGINE.trans, s.trans, v => TRANS[v].name)}</select></label><label class="l">Фон<select data-k="bg">${opt(ENGINE.bg, s.bg, v => LABEL[v])}</select></label><label class="l">Элемент<select data-k="fx"><option value="">—</option>${opt(ENGINE.fx, s.fx[0], v => FX[v].name)}</select></label></div>${VL ? `<div class="row"><label class="l">VPN-графика<select data-k="art">${artOpts(s.art || 'auto')}</select></label></div>` : ''}</div></div>`; }).join('') || '<div class="hint">Сцен пока нет — создай видео из запроса или добавь сцену вручную.</div>';
+    <div class="row"><label class="l">Переход<select data-k="trans">${opt(ENGINE.trans, s.trans, v => TRANS[v].name)}</select></label><label class="l">Фон<select data-k="bg">${opt(ENGINE.bg, s.bg, v => LABEL[v])}</select></label><label class="l">Элемент<select data-k="fx"><option value="">—</option>${opt(ENGINE.fx, s.fx[0], v => FX[v].name)}</select></label></div><div class="row"><label class="l">Логотипы (бренды через запятую, пусто — автоматически по тексту)<input type="text" data-k="logos" value="${esc((s.logos || []).join(', '))}" placeholder="youtube.com, Сбер"></label></div>${VL ? `<div class="row"><label class="l">VPN-графика<select data-k="art">${artOpts(s.art || 'auto')}</select></label></div>` : ''}</div></div>`; }).join('') || '<div class="hint">Сцен пока нет — создай видео из запроса или добавь сцену вручную.</div>';
   $('#totalHint').textContent = `Сцен: ${state.scenes.length} · общая длительность ${total().toFixed(1)} с`;
 }
 $('#sceneList').addEventListener('input', e => {
   const el = e.target, card = el.closest('.scene'); if (!card || !el.dataset.k) return; const s = state.scenes[+card.dataset.i], k = el.dataset.k;
-  if (k === 'dur') { const v = clamp(+el.value, .8, 20); if (!isFinite(v)) return; s.dur = v; } else if (k === 'fx') s.fx = el.value ? [el.value] : []; else s[k] = el.value;
-  layoutCache.clear(); P.t = clamp(startOf(+card.dataset.i) + .01, 0, total()); if (k === 'anim' || k === 'trans' || k === 'art') P.t = startOf(+card.dataset.i) + (k === 'trans' ? .12 : k === 'art' ? .9 : .3);
+  if (k === 'dur') { const v = clamp(+el.value, .8, 20); if (!isFinite(v)) return; s.dur = v; } else if (k === 'fx') s.fx = el.value ? [el.value] : []; else if (k === 'logos') s.logos = el.value.split(/[,;]+/).map(x => x.trim().slice(0, 40)).filter(Boolean).slice(0, 3); else s[k] = el.value;
+  layoutCache.clear(); P.t = clamp(startOf(+card.dataset.i) + .01, 0, total()); if (k === 'anim' || k === 'trans' || k === 'art' || k === 'logos') P.t = startOf(+card.dataset.i) + (k === 'trans' ? .12 : (k === 'art' || k === 'logos') ? .9 : .3);
   pause(); renderNow(); $('#totalHint').textContent = `Сцен: ${state.scenes.length} · общая длительность ${total().toFixed(1)} с`; autosave();
 });
 $('#sceneList').addEventListener('click', e => {
@@ -1084,7 +1132,7 @@ $('#sceneList').addEventListener('click', e => {
   if (a === 'fold') { const f = card.classList.toggle('fold'); if (f) foldSet.add(S[i].id); else foldSet.delete(S[i].id); b.textContent = f ? '▸' : '▾'; return; }
   if (a === 'up' && i > 0) [S[i - 1], S[i]] = [S[i], S[i - 1]];
   else if (a === 'down' && i < S.length - 1) [S[i + 1], S[i]] = [S[i], S[i + 1]];
-  else if (a === 'dup') S.splice(i + 1, 0, { ...S[i], id: uid(), fx: [...S[i].fx] });
+  else if (a === 'dup') S.splice(i + 1, 0, { ...S[i], id: uid(), fx: [...S[i].fx], logos: [...(S[i].logos || [])] });
   else if (a === 'del') { if (S.length === 1 && !confirm('Удалить последнюю сцену?')) return; S.splice(i, 1); }
   else return;
   P.t = clamp(P.t, 0, total()); renderScenes(); renderNow(); autosave();
@@ -1260,9 +1308,10 @@ function syncLook() {
   const c = state.custom || {}, p = pal(); buildFontSel();
   $('#fontSel').value = c.font && [...$('#fontSel').options].some(o => o.value === c.font) ? c.font : '';
   $('#caseSel').value = c.upper === true ? '1' : c.upper === false ? '0' : '';
-  $('#vpnSel').value = state.vpn; $('#paceSel').value = state.pace; $('#colAccent').value = p.accent; $('#colBg').value = p.bg; $('#colFg').value = p.fg;
+  $('#vpnSel').value = state.vpn; $('#brandSel').value = state.brands; $('#paceSel').value = state.pace; $('#colAccent').value = p.accent; $('#colBg').value = p.bg; $('#colFg').value = p.fg;
 }
 function lookChanged() { layoutCache.clear(); renderNow(); autosave(); }
+$('#brandSel').onchange = e => { state.brands = e.target.value; layoutCache.clear(); renderNow(); autosave(); if (e.target.value === 'auto' && !window.BrandLib) toast('Файл brands-library.js не найден рядом с index.html', true); };
 $('#vpnSel').onchange = e => { state.vpn = e.target.value; renderNow(); autosave(); if (e.target.value !== 'off' && !VL) toast('Файл vpn-library.js не найден рядом с index.html', true); };
 $('#paceSel').onchange = e => {
   state.pace = e.target.value; layoutCache.clear();
@@ -1344,7 +1393,7 @@ $('#jsonIn').onchange = async e => { const f = e.target.files[0]; if (!f) return
 
 /* Settings UI */
 $('#workerUrl').value = localStorage.getItem('vc.worker') || '';
-$('#btnWorkerSave').onclick = () => { const v = $('#workerUrl').value.trim(); if (v && !/^https:\/\//i.test(v)) return toast('Адрес должен начинаться с https://', true); localStorage.setItem('vc.worker', v); toast(v ? 'Адрес Worker сохранён' : 'Worker отключён — работает локальный Director'); $('#srcTag').textContent = v ? 'Director: Gemini (Worker)' : 'Director: локальный'; };
+$('#btnWorkerSave').onclick = () => { const v = $('#workerUrl').value.trim(); if (v && !/^https:\/\//i.test(v)) return toast('Адрес должен начинаться с https://', true); localStorage.setItem('vc.worker', v); if (window.BrandLib) { BrandLib.forget(); warmLogos(); } toast(v ? 'Адрес Worker сохранён' : 'Worker отключён — работает локальный Director'); $('#srcTag').textContent = v ? 'Director: Gemini (Worker)' : 'Director: локальный'; };
 $('#btnWorkerTest').onclick = async () => { const u = Worker.url() || $('#workerUrl').value.trim().replace(/\/+$/, ''); if (!u) return toast('Укажи адрес Worker', true); try { const j = await (await fetch(u + '/health')).json(); toast(j.ok ? `Worker работает (v${j.version}), ключ Gemini: ${j.hasKey ? 'есть' : 'НЕТ'}` : 'Worker ответил ошибкой', !j.ok || !j.hasKey); } catch (e) { toast('Worker недоступен: ' + e.message, true); } };
 
 /* ---------- Init ---------- */
